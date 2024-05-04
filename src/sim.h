@@ -260,13 +260,17 @@ EXPORT int sim_is_key_held(int key);
 EXPORT int sim_was_key_pressed(int key);
 EXPORT int sim_was_key_released(int key);
 EXPORT int sim_are_keys_down(int n, ...);
+#define SIM_ARE_KEYS_DOWN(...) sim_are_keys_down(N_ARGS(__VA_ARGS__), __VA_ARGS__)
 EXPORT int sim_any_keys_down(int n, ...);
+#define SIM_ANY_KEYS_DOWN(...) sim_any_keys_down(N_ARGS(__VA_ARGS__), __VA_ARGS__)
 EXPORT int sim_is_button_down(int button);
 EXPORT int sim_is_button_held(int button);
 EXPORT int sim_was_button_pressed(int button);
 EXPORT int sim_was_button_released(int button);
 EXPORT int sim_are_buttons_down(int n, ...);
+#define SIM_ARE_BUTTONS_DOWN(...) sim_are_buttons_down(N_ARGS(__VA_ARGS__), __VA_ARGS__)
 EXPORT int sim_any_buttons_down(int n, ...);
+#define SIM_ANY_BUTTONS_DOWN(...) sim_any_buttons_down(N_ARGS(__VA_ARGS__), __VA_ARGS__)
 EXPORT int sim_has_mouse_move(void);
 EXPORT int sim_cursor_x(void);
 EXPORT int sim_cursor_y(void);

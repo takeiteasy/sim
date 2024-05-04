@@ -175,7 +175,7 @@ typedef struct {
     sg_pass_action pass_action;
     mat4 matrix_stack[MAX_MATRIX_STACK];
     int matrix_stack_count;
-    mat4 modelview, projection, texture, transform, *current;
+    mat4 modelview, projection, texture, *current;
     int matrix_mode;
     sim_vertex_buffer_t *vbuffer;
     sg_image texture0;
@@ -278,7 +278,14 @@ static void init(void) {
         .layout = {
             .buffers[1].step_func = SG_VERTEXSTEP_PER_INSTANCE,
             .attrs = {
-                // ...
+                [ATTR_vs_position] = {.format=SG_VERTEXFORMAT_FLOAT3, .buffer_index=0},
+                [ATTR_vs_normal] = {.format=SG_VERTEXFORMAT_FLOAT3, .buffer_index=0},
+                [ATTR_vs_texcoord0] = {.format=SG_VERTEXFORMAT_FLOAT2, .buffer_index=0},
+                [ATTR_vs_color0] = {.format=SG_VERTEXFORMAT_FLOAT4, .buffer_index=0},
+                [ATTR_vs_inst_mat_xxxx] = {.format=SG_VERTEXFORMAT_FLOAT4, .buffer_index=1},
+                [ATTR_vs_inst_mat_yyyy] = {.format=SG_VERTEXFORMAT_FLOAT4, .buffer_index=1},
+                [ATTR_vs_inst_mat_zzzz] = {.format=SG_VERTEXFORMAT_FLOAT4, .buffer_index=1},
+                [ATTR_vs_inst_mat_wwww] = {.format=SG_VERTEXFORMAT_FLOAT4, .buffer_index=1}
             }
         },
         .depth = {
@@ -913,7 +920,7 @@ void sim_flush(void) {
     assert((vb = sim.state.vbuffer));
     vb->instances = realloc(vb->instances, ++vb->icount *sizeof(sim_vertex_inst_t));
     sim_vertex_inst_t *inst = &vb->instances[vb->icount-1];
-    mat4 m = *sim.state.current;
+    mat4 m = sim.state.modelview;
     inst->xxxx = vec4_new(m.m0, m.m4, m.m8,  m.m12);
     inst->yyyy = vec4_new(m.m1, m.m5, m.m9,  m.m13);
     inst->zzzz = vec4_new(m.m2, m.m6, m.m10, m.m14);
@@ -975,10 +982,12 @@ void sim_commit(void) {
                 sg_begin_default_pass(&call->pass_action, sapp_width(), sapp_height());
                 sg_apply_pipeline(call->pip);
                 sg_apply_bindings(&call->bind);
-                // sg_apply_uniforms ...
+                vs_params_t vs_params;
+                memcpy(&vs_params.texture_matrix, &sim.state.texture, 16 * sizeof(float));
+                memcpy(&vs_params.projection_matrix, &sim.state.projection, 16 * sizeof(float));
+                sg_apply_uniforms(SG_SHADERSTAGE_VS, SLOT_vs_params, &SG_RANGE(vs_params));
                 sg_draw(0, call->vcount, call->icount);
                 sg_end_pass();
-                
                 sg_destroy_pipeline(call->pip);
                 sg_destroy_buffer(call->bind.vertex_buffers[0]);
                 sg_destroy_buffer(call->bind.vertex_buffers[1]);

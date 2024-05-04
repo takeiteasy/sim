@@ -1,8 +1,7 @@
 @vs vs
 uniform vs_params {
-    mat4 view_matrix;
-    mat4 texture_matrix;
     mat4 projection_matrix;
+    mat4 texture_matrix;
 };
 in vec4 position;
 in vec4 normal;
@@ -38,13 +37,12 @@ mat4 make_matrix(vec4 x, vec4 y, vec4 z, vec4 w) {
     return m;
 }
 
-
 void main() {
-    mat4 model_matrix = make_matrix(inst_mat_xxxx,
-                                    inst_mat_yyyy,
-                                    inst_mat_zzzz,
-                                    inst_mat_wwww);
-	gl_Position = (model_matrix * view_matrix * projection_matrix) * position;
+    mat4 modelview_matrix = make_matrix(inst_mat_xxxx,
+                                        inst_mat_yyyy,
+                                        inst_mat_zzzz,
+                                        inst_mat_wwww);
+	gl_Position = (modelview_matrix * projection_matrix) * position;
 //	gl_PointSize = psize;
 	uv = texture_matrix * vec4(texcoord0, 0.0, 1.0);
 	color = color0;
