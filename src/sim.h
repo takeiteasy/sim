@@ -56,7 +56,7 @@ extern "C" {
 #define EXPORT
 #endif
 
-typedef enum {
+enum {
     KEY_INVALID          = 0,
     KEY_SPACE            = 32,
     KEY_APOSTROPHE       = 39,  /* ' */
@@ -178,16 +178,16 @@ typedef enum {
     KEY_RIGHT_ALT        = 346,
     KEY_RIGHT_SUPER      = 347,
     KEY_MENU             = 348,
-} sim_key_t;
+};
 
-typedef enum {
+enum {
     BUTTON_LEFT    = 0x0,
     BUTTON_RIGHT   = 0x1,
     BUTTON_MIDDLE  = 0x2,
     BUTTON_INVALID = 0x100,
-} sim_button_t;
+};
 
-typedef enum {
+enum {
     MODIFIER_SHIFT = 0x1,
     MODIFIER_CTRL  = 0x2,
     MODIFIER_ALT   = 0x4,
@@ -195,7 +195,7 @@ typedef enum {
     MODIFIER_LMB   = 0x100,
     MODIFIER_RMB   = 0x200,
     MODIFIER_MMB   = 0x400
-} sim_modifier_t;
+};
 
 enum {
     SIM_MODELVIEW  = 0x0001,
@@ -216,30 +216,8 @@ enum {
     SIM_TEXTURE_3D = 0x0002
 };
 
-enum  {
-    SIM_INVALID,
-    SIM_FLOAT,
-    SIM_FLOAT2,
-    SIM_FLOAT3,
-    SIM_FLOAT4,
-    SIM_BYTE4,
-    SIM_BYTE4N,
-    SIM_UBYTE4,
-    SIM_UBYTE4N,
-    SIM_SHORT2,
-    SIM_SHORT2N,
-    SIM_USHORT2N,
-    SIM_SHORT4,
-    SIM_SHORT4N,
-    SIM_USHORT4N,
-    SIM_UINT10_N2,
-    SIM_HALF2,
-    SIM_HALF4,
-    SIM_NUM
-};
-
 enum {
-    SIM_CMP_DEFAULT,
+    SIM_CMP_DEFAULT = 0,
     SIM_CMP_NEVER,
     SIM_CMP_LESS,
     SIM_CMP_EQUAL,
@@ -259,20 +237,14 @@ enum {
     SIM_BLEND_MUL,
 };
 
-#define SIM_CALLBACKS        \
-    X(init,         (void*)) \
-    X(frame,        (void*)) \
-    X(exit,         (void*))
+enum {
+    SIM_CULL_DEFAULT = 0,
+    SIM_CULL_NONE,
+    SIM_CULL_FRONT,
+    SIM_CULL_BACK
+};
 
-EXPORT void sim_set_userdata(void *userdata);
-#define X(NAME, ARGS) void(*NAME##_callback)ARGS,
-EXPORT void sim_set_callbacks(SIM_CALLBACKS void *userdata);
-#undef X
-#define X(NAME, ARGS) \
-EXPORT void sim_set_##NAME##_callback(void(*NAME##_callback)ARGS);
-SIM_CALLBACKS
-#undef X
-EXPORT int sim_run(int argc, const char *argv[], void(*loop)(float));
+EXPORT int sim_run(int argc, const char *argv[], void(*loop)(double));
 
 EXPORT int sim_window_width(void);
 EXPORT int sim_window_height(void);
@@ -283,16 +255,16 @@ EXPORT void sim_toggle_cursor_visible(void);
 EXPORT int sim_is_cursor_locked(void);
 EXPORT void sim_toggle_cursor_lock(void);
 
-EXPORT int sim_is_key_down(sim_key_t key);
-EXPORT int sim_is_key_held(sim_key_t key);
-EXPORT int sim_was_key_pressed(sim_key_t key);
-EXPORT int sim_was_key_released(sim_key_t key);
+EXPORT int sim_is_key_down(int key);
+EXPORT int sim_is_key_held(int key);
+EXPORT int sim_was_key_pressed(int key);
+EXPORT int sim_was_key_released(int key);
 EXPORT int sim_are_keys_down(int n, ...);
 EXPORT int sim_any_keys_down(int n, ...);
-EXPORT int sim_is_button_down(sim_button_t button);
-EXPORT int sim_is_button_held(sim_button_t button);
-EXPORT int sim_was_button_pressed(sim_button_t button);
-EXPORT int sim_was_button_released(sim_button_t button);
+EXPORT int sim_is_button_down(int button);
+EXPORT int sim_is_button_held(int button);
+EXPORT int sim_was_button_pressed(int button);
+EXPORT int sim_was_button_released(int button);
 EXPORT int sim_are_buttons_down(int n, ...);
 EXPORT int sim_any_buttons_down(int n, ...);
 EXPORT int sim_has_mouse_move(void);
@@ -303,10 +275,6 @@ EXPORT int sim_cursor_delta_y(void);
 EXPORT int sim_has_wheel_moved(void);
 EXPORT float sim_scroll_x(void);
 EXPORT float sim_scroll_y(void);
-
-EXPORT void* sim_current_state(void);
-EXPORT void* sim_pop_state(void);
-EXPORT void sim_push_state(void *state);
 
 EXPORT void sim_matrix_mode(int mode);
 EXPORT void sim_push_matrix(void);
@@ -320,15 +288,30 @@ EXPORT void sim_frustum(double left, double right, double bottom, double top, do
 EXPORT void sim_ortho(double left, double right, double bottom, double top, double znear, double zfar);
 EXPORT void sim_look_at(float eyeX, float eyeY, float eyeZ, float targetX, float targetY, float targetZ, float upX, float upY, float upZ);
 
-EXPORT void sim_begin(int mode);
-EXPORT void sim_end(void);
-EXPORT void sim_commit(void);
-
 EXPORT int sim_empty_texture(int width, int height);
 EXPORT int sim_texture_from_file(const char *path);
 EXPORT int sim_texture_from_memory(unsigned char *data, size_t size_of_data);
 EXPORT int sim_check_texture(int texture);
 EXPORT void sim_release_texture(int texture);
+
+EXPORT void sim_clear_color(float r, float g, float b, float a);
+EXPORT void sim_viewport(int x, int y, int width, int height);
+EXPORT void sim_scissor_rect(int x, int y, int width, int height);
+EXPORT void sim_blend_mode(int mode);
+EXPORT void sim_depth_func(int func);
+EXPORT void sim_cull_mode(int mode);
+EXPORT void sim_begin(int mode);
+EXPORT void sim_vertex2i(int x, int y);
+EXPORT void sim_vertex2f(float x, float y);
+EXPORT void sim_vertex3f(float x, float y, float z);
+EXPORT void sim_texcoord2f(float x, float y);
+EXPORT void sim_normal3f(float x, float y, float z);
+EXPORT void sim_color4ub(unsigned char r, unsigned char g, unsigned char b, unsigned char a);
+EXPORT void sim_color3f(float x, float y, float z);
+EXPORT void sim_color4f(float x, float y, float z, float w);
+EXPORT void sim_flush(void);
+EXPORT void sim_end(void);
+EXPORT void sim_commit(void);
 
 #undef EXPORT
 
