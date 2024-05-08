@@ -76,7 +76,7 @@ static void loop(double t) {
         sim_vertex3f(data[0], data[1], data[2]);
     }
     sim_draw();
-//    sim_end();
+    sim_end();
 }
 
 static void deinit(void) {

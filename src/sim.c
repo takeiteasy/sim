@@ -120,6 +120,16 @@ typedef struct {
     hmm_vec4 color;
 } sim_vertex_t;
 
+enum {
+    SIM_CMD_VIEWPORT,
+    SIM_CMD_SCISSOR_RECT,
+    SIM_CMD_DRAW_CALL
+};
+
+typedef struct {
+    float x, y, w, h;
+} sim_rect_t;
+
 typedef struct {
     sim_vertex_t *vertices;
     int vcount;
@@ -137,6 +147,16 @@ typedef struct {
     sim_vertex_t current_vertex;
 } sim_state_t;
 
+typedef struct sim_command_t {
+    void *data;
+    int type;
+    struct sim_command_t *next;
+} sim_command_t;
+
+typedef struct {
+    sim_command_t *head, *tail;
+} sim_command_queue_t;
+
 static struct sim_t {
     int running;
     int mouse_hidden;
@@ -149,6 +169,7 @@ static struct sim_t {
     sim_input_t current_input;
     sim_input_t last_input;
     sim_state_t state;
+    sim_command_queue_t commands;
 } sim = {
     .running = 0,
     .mouse_hidden = 0,
@@ -179,6 +200,20 @@ static void sim_set_current_matrix(hmm_mat4 mat) {
 static void sim_push_vertex(void) {
     sim.state.draw_call.vertices = realloc(sim.state.draw_call.vertices, ++sim.state.draw_call.vcount * sizeof(sim_vertex_t));
     memcpy(&sim.state.draw_call.vertices[sim.state.draw_call.vcount-1], &sim.state.current_vertex, sizeof(sim_vertex_t));
+}
+
+static void sim_push_command(int type, void *data) {
+    sim_command_t *command = malloc(sizeof(sim_command_t));
+    command->type = type;
+    command->data = data;
+    command->next = NULL;
+    
+    if (!sim.commands.head && !sim.commands.tail)
+        sim.commands.head = sim.commands.tail = command;
+    else {
+        sim.commands.tail->next = command;
+        sim.commands.tail = command;
+    }
 }
 
 static void init(void) {
@@ -226,26 +261,6 @@ static void frame(void) {
     vs_params_t vs_params;
     vs_params.texture_m = *sim_matrix_stack_head(SIM_MATRIXMODE_TEXTURE);
     vs_params.projection = *sim_matrix_stack_head(SIM_MATRIXMODE_PROJECTION);
-    
-    sg_buffer_desc b0 = {
-        .data = (sg_range) {
-            .ptr = sim.state.draw_call.vertices,
-            .size = sim.state.draw_call.vcount * sizeof(sim_vertex_t)
-        }
-    };
-    sg_buffer_desc b1 = {
-        .size = sizeof(sim_vs_inst_t),
-        .usage = SG_USAGE_STREAM
-    };
-    sim.state.draw_call.bind = (sg_bindings) {
-        .vertex_buffers[0] = sg_make_buffer(&b0),
-        .vertex_buffers[1] = sg_make_buffer(&b1),
-    };
-    sg_range r0 = {
-        .ptr = sim.state.draw_call.instances,
-        .size = sim.state.draw_call.icount * sizeof(sim_vs_inst_t)
-    };
-    sg_update_buffer(sim.state.draw_call.bind.vertex_buffers[1], &r0);
     sg_begin_pass(&(sg_pass) {
         .action = {
             .colors[0] = {
@@ -255,17 +270,36 @@ static void frame(void) {
         },
         .swapchain = sglue_swapchain()
     });
-    sg_apply_pipeline(sim.state.draw_call.pip);
-    sg_apply_bindings(&sim.state.draw_call.bind);
-    sg_apply_uniforms(SG_SHADERSTAGE_VS, SLOT_vs_params, &SG_RANGE(vs_params));
-    sg_draw(0, sim.state.draw_call.vcount, sim.state.draw_call.icount);
+    
+    sim_command_t *cursor = sim.commands.head;
+    while (cursor) {
+        sim_command_t *tmp = cursor->next;
+        switch (cursor->type) {
+            case SIM_CMD_VIEWPORT:
+            case SIM_CMD_SCISSOR_RECT:
+                break;
+            case SIM_CMD_DRAW_CALL:;
+                sim_draw_call_t *call = (sim_draw_call_t*)cursor->data;
+                sg_apply_pipeline(call->pip);
+                sg_apply_bindings(&call->bind);
+                sg_apply_uniforms(SG_SHADERSTAGE_VS, SLOT_vs_params, &SG_RANGE(vs_params));
+                sg_draw(0, call->vcount, call->icount);
+                sg_destroy_buffer(call->bind.vertex_buffers[0]);
+                sg_destroy_buffer(call->bind.vertex_buffers[1]);
+                break;
+            default:
+                abort();
+        }
+        free(cursor->data);
+        free(cursor);
+        cursor = tmp;
+    }
+    sim.commands.head = sim.commands.tail = NULL;
     sg_end_pass();
     sg_commit();
     
     memcpy(&sim.last_input, &sim.current_input, sizeof(sim_input_t));
     memset(&sim.current_input, 0, sizeof(sim_input_t));
-    sg_destroy_buffer(sim.state.draw_call.bind.vertex_buffers[0]);
-    sg_destroy_buffer(sim.state.draw_call.bind.vertex_buffers[1]);
 }
 
 static void event(const sapp_event *e) {
@@ -580,7 +614,7 @@ void sim_cull_mode(int mode) {
 }
 
 void sim_begin(int mode) {
-//    assert(!sim.state.draw_call.vertices);
+    assert(!sim.state.draw_call.vertices && !sim.state.draw_call.instances);
     if (sim.state.draw_call.vertices)
         sim_end();
     sim.state.draw_call.vertices = malloc(0);
@@ -661,10 +695,35 @@ void sim_draw(void) {
 void sim_end(void) {
     assert(sim.state.draw_call.vertices && sim.state.draw_call.vcount);
     assert(sim.state.draw_call.instances && sim.state.draw_call.icount);
-    // push draw call
+    
+    sg_buffer_desc b0 = {
+        .data = (sg_range) {
+            .ptr = sim.state.draw_call.vertices,
+            .size = sim.state.draw_call.vcount * sizeof(sim_vertex_t)
+        }
+    };
+    sg_buffer_desc b1 = {
+        .size = sizeof(sim_vs_inst_t),
+        .usage = SG_USAGE_STREAM
+    };
+    sim.state.draw_call.bind = (sg_bindings) {
+        .vertex_buffers[0] = sg_make_buffer(&b0),
+        .vertex_buffers[1] = sg_make_buffer(&b1),
+    };
+    sg_range r0 = {
+        .ptr = sim.state.draw_call.instances,
+        .size = sim.state.draw_call.icount * sizeof(sim_vs_inst_t)
+    };
+    sg_update_buffer(sim.state.draw_call.bind.vertex_buffers[1], &r0);
+    sim_draw_call_t *draw_call = malloc(sizeof(sim_draw_call_t));
+    memcpy(draw_call, &sim.state.draw_call, sizeof(sim_draw_call_t));
+    sim_push_command(SIM_CMD_DRAW_CALL, draw_call);
+    
     free(sim.state.draw_call.vertices);
     sim.state.draw_call.vcount = 0;
     free(sim.state.draw_call.instances);
     sim.state.draw_call.icount = 0;
-//    memset(&sim.state.draw_call, 0, sizeof(sim_draw_call_t));
+    sg_pipeline tmp = sim.state.draw_call.pip;
+    memset(&sim.state.draw_call, 0, sizeof(sim_draw_call_t));
+    sim.state.draw_call.pip = tmp;
 }
