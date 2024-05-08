@@ -25,7 +25,6 @@
 
 #ifndef SIM_H
 #define SIM_H
-#include "sokol_gfx.h"
 
 #if defined(__cplusplus)
 extern "C" {
@@ -204,17 +203,18 @@ enum {
 };
 
 enum {
-    SIM_MODELVIEW  = 0x0001,
-    SIM_PROJECTION = 0x0002,
-    SIM_TEXTURE    = 0x0003
+    SIM_MATRIXMODE_MODELVIEW  = 0,
+    SIM_MATRIXMODE_PROJECTION,
+    SIM_MATRIXMODE_TEXTURE,
+    SIM_MATRIXMODE_COUNT
 };
 
 enum {
-    SIM_POINTS = 0x0001,
-    SIM_LINES = 0x0002,
-    SIM_LINE_STRIP = 0x0003,
-    SIM_TRIANGLES = 0x0004,
-    SIM_TRIANGLE_STRIP = 0x0005
+    SIM_DRAW_POINTS = 0x0001,
+    SIM_DRAW_LINES = 0x0002,
+    SIM_DRAW_LINE_STRIP = 0x0003,
+    SIM_DRAW_TRIANGLES = 0x0004,
+    SIM_DRAW_TRIANGLE_STRIP = 0x0005
 };
 
 enum {
@@ -250,7 +250,12 @@ enum {
     SIM_CULL_BACK
 };
 
-EXPORT int sim_run(int argc, const char *argv[], void(*loop)(double));
+EXPORT int sim_run(int window_width,
+                   int window_height,
+                   const char *title,
+                   void(*init)(void),
+                   void(*loop)(double),
+                   void(*deinit)(void));
 
 EXPORT int sim_window_width(void);
 EXPORT int sim_window_height(void);
@@ -296,13 +301,8 @@ EXPORT void sim_rotate(float angle, float x, float y, float z);
 EXPORT void sim_scale(float x, float y, float z);
 EXPORT void sim_frustum(double left, double right, double bottom, double top, double znear, double zfar);
 EXPORT void sim_ortho(double left, double right, double bottom, double top, double znear, double zfar);
+EXPORT void sim_perspective(float fovy, float aspect_ratio, float znear, float zfar);
 EXPORT void sim_look_at(float eyeX, float eyeY, float eyeZ, float targetX, float targetY, float targetZ, float upX, float upY, float upZ);
-
-EXPORT int sim_empty_texture(int width, int height);
-EXPORT int sim_texture_from_file(const char *path);
-EXPORT int sim_texture_from_memory(unsigned char *data, size_t size_of_data);
-EXPORT int sim_check_texture(int texture);
-EXPORT void sim_release_texture(int texture);
 
 EXPORT void sim_clear_color(float r, float g, float b, float a);
 EXPORT void sim_viewport(int x, int y, int width, int height);
@@ -310,6 +310,7 @@ EXPORT void sim_scissor_rect(int x, int y, int width, int height);
 EXPORT void sim_blend_mode(int mode);
 EXPORT void sim_depth_func(int func);
 EXPORT void sim_cull_mode(int mode);
+
 EXPORT void sim_begin(int mode);
 EXPORT void sim_vertex2i(int x, int y);
 EXPORT void sim_vertex2f(float x, float y);
@@ -321,7 +322,6 @@ EXPORT void sim_color3f(float x, float y, float z);
 EXPORT void sim_color4f(float x, float y, float z, float w);
 EXPORT void sim_flush(void);
 EXPORT void sim_end(void);
-EXPORT void sim_commit(void);
 
 #undef EXPORT
 

@@ -28,30 +28,29 @@ else
 endif
 
 NAME=sim
-EXTRA_CFLAGS=-shared -fpic -std=c++11 -lstdc++
 INCLUDE=-Ideps -Isrc -Ibuild
 
-SHDC_PATH=./bin/$(ARCH)/sokol-shdc$(PROG_EXT)
+default: library
+
+library:
+	$(CC) $(INCLUDE) -shared -fpic $(CFLAGS) src/sim.c -o build/lib$(NAME).$(LIB_EXT)
+
+test: library
+	$(CC) $(INCLUDE) $(EXTRA_CFLAGS) $(CFLAGS) src/*.c -o build/$(NAME)_test$(PROG_EXT)
+
+all: library test
+
+ARCH_PATH=deps/sokol-tools-bin/bin/$(ARCH)
+SHDC_PATH=$(ARCH_PATH)/sokol-shdc$(PROG_EXT)
 SHADERS=$(wildcard src/*.glsl)
 SHADER_OUTS=$(patsubst %,%.h,$(SHADERS))
-
-all: default
 
 .SECONDEXPANSION:
 SHADER=$(patsubst %.h,%,$@)
 SHADER_OUT=$@
 %.glsl.h: $(SHADERS)
-	$(SHDC_PATH) -i $(SHADER) -o $(SHADER_OUT) -l glsl330:metal_macos:hlsl5:wgpu -b
+	$(SHDC_PATH) -i $(SHADER) -o $(SHADER_OUT) -l $(SHDC_FLAGS)
 
 shaders: $(SHADER_OUTS)
-	rm src/*.dia		|| yes
-	rm src/*.air		|| yes
-	rm src/*.metal		|| yes
-	rm src/*.metallib	|| yes
 
-default: library
-
-library: shaders
-	$(CC) $(INCLUDE) $(EXTRA_CFLAGS) $(CFLAGS) src/sim.cpp -o build/$(NAME).$(LIB_EXT)
-
-.PHONY: all library shaders
+.PHONY: default all library test shaders
