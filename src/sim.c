@@ -192,7 +192,7 @@ static void init(void) {
     if (sim.init)
         sim.init();
     
-    sim.state.pip = sg_make_pipeline(&(sg_pipeline_desc){
+    sim.state.draw_call.pip = sg_make_pipeline(&(sg_pipeline_desc){
         .layout = {
             .buffers[1].step_func = SG_VERTEXSTEP_PER_INSTANCE,
             .attrs = {
@@ -221,136 +221,51 @@ static void init(void) {
 
 static void frame(void) {
     const float t = (float)(sapp_frame_duration() * 60.0);
-    static float rx = 0.f;
-    static float ry = 0.f;
-    rx += 1.f * t;
-    ry += 2.f * t;
-    
-    sim_matrix_mode(SIM_MATRIXMODE_PROJECTION);
-    sim_load_identity();
-    sim_perspective(60.f, sapp_widthf() / sapp_heightf(), .01f, 10.f);
-    sim_matrix_mode(SIM_MATRIXMODE_MODELVIEW);
-    sim_load_identity();
-    sim_look_at(0.0f, 1.5f, 6.0f,
-                0.0f, 0.0f, 0.0f,
-                0.0f, 1.0f, 0.0f);
-    sim_rotate(rx, 1.f, 0.f, 0.f);
-    sim_rotate(ry, 0.f, 1.f, 0.f);
-    hmm_mat4 model = *sim_matrix_stack_head(SIM_MATRIXMODE_MODELVIEW);
-    
+    sim.loop(t);
+
     vs_params_t vs_params;
     vs_params.texture_m = *sim_matrix_stack_head(SIM_MATRIXMODE_TEXTURE);
     vs_params.projection = *sim_matrix_stack_head(SIM_MATRIXMODE_PROJECTION);
     
-    float vertices[] = {
-        -1.0, -1.0, -1.0, 1.0,  1.0, 0.0, 0.0, 1.0,
-         1.0, -1.0, -1.0, 1.0,  1.0, 0.0, 0.0, 1.0,
-         1.0,  1.0, -1.0, 1.0,  1.0, 0.0, 0.0, 1.0,
-        -1.0,  1.0, -1.0, 1.0,  1.0, 0.0, 0.0, 1.0,
-        
-        -1.0, -1.0,  1.0, 1.0,  0.0, 1.0, 0.0, 1.0,
-         1.0, -1.0,  1.0, 1.0,  0.0, 1.0, 0.0, 1.0,
-         1.0,  1.0,  1.0, 1.0,  0.0, 1.0, 0.0, 1.0,
-        -1.0,  1.0,  1.0, 1.0,  0.0, 1.0, 0.0, 1.0,
-        
-        -1.0, -1.0, -1.0, 1.0,  0.0, 0.0, 1.0, 1.0,
-        -1.0,  1.0, -1.0, 1.0,  0.0, 0.0, 1.0, 1.0,
-        -1.0,  1.0,  1.0, 1.0,  0.0, 0.0, 1.0, 1.0,
-        -1.0, -1.0,  1.0, 1.0,  0.0, 0.0, 1.0, 1.0,
-        
-         1.0, -1.0, -1.0, 1.0,   1.0, 0.5, 0.0, 1.0,
-         1.0,  1.0, -1.0, 1.0,   1.0, 0.5, 0.0, 1.0,
-         1.0,  1.0,  1.0, 1.0,   1.0, 0.5, 0.0, 1.0,
-         1.0, -1.0,  1.0, 1.0,   1.0, 0.5, 0.0, 1.0,
-        
-        -1.0, -1.0, -1.0, 1.0,  0.0, 0.5, 1.0, 1.0,
-        -1.0, -1.0,  1.0, 1.0,  0.0, 0.5, 1.0, 1.0,
-         1.0, -1.0,  1.0, 1.0,  0.0, 0.5, 1.0, 1.0,
-         1.0, -1.0, -1.0, 1.0,  0.0, 0.5, 1.0, 1.0,
-        
-        -1.0,  1.0, -1.0, 1.0,  1.0, 0.0, 0.5, 1.0,
-        -1.0,  1.0,  1.0, 1.0,  1.0, 0.0, 0.5, 1.0,
-         1.0,  1.0,  1.0, 1.0,  1.0, 0.0, 0.5, 1.0,
-         1.0,  1.0, -1.0, 1.0,  1.0, 0.0, 0.5, 1.0
+    sg_buffer_desc b0 = {
+        .data = (sg_range) {
+            .ptr = sim.state.draw_call.vertices,
+            .size = sim.state.draw_call.vcount * sizeof(sim_vertex_t)
+        }
     };
-    
-    uint16_t indices[] = {
-        0,  1,  2,   0,  2,  3,
-        6,  5,  4,   7,  6,  4,
-        8,  9,  10,  8,  10, 11,
-        14, 13, 12,  15, 14, 12,
-        16, 17, 18,  16, 18, 19,
-        22, 21, 20,  23, 22, 20
+    sg_buffer_desc b1 = {
+        .size = sizeof(sim_vs_inst_t),
+        .usage = SG_USAGE_STREAM
     };
-    
-    sim_begin(SIM_DRAW_TRIANGLES);
-    for (int i = 0; i < 36; i++) {
-        int j = indices[i];
-        float *data = vertices + j * 8;
-        sim_color4f(data[4], data[5], data[6], data[7]);
-        sim_vertex3f(data[0], data[1], data[2]);
-    }
-    
-    memset(&sim.state.bind, 0, sizeof(sg_bindings));
-    sim.state.bind = (sg_bindings) {
-        .vertex_buffers[0] = sg_make_buffer(&(sg_buffer_desc){
-            .data = (sg_range) {
-                .ptr = sim.state.draw_call.vertices,
-                .size = sim.state.draw_call.vcount * sizeof(sim_vertex_t)
-            }
-        }),
-        .vertex_buffers[1] = sg_make_buffer(&(sg_buffer_desc) {
-            .size = sizeof(sim_vs_inst_t),
-            .usage = SG_USAGE_STREAM
-        }),
+    sim.state.draw_call.bind = (sg_bindings) {
+        .vertex_buffers[0] = sg_make_buffer(&b0),
+        .vertex_buffers[1] = sg_make_buffer(&b1),
     };
-    
-    sim_vs_inst_t v = {
-        .x = HMM_Vec4(model.Elements[0][0],
-                      model.Elements[1][0],
-                      model.Elements[2][0],
-                      model.Elements[3][0]),
-        .y = HMM_Vec4(model.Elements[0][1],
-                      model.Elements[1][1],
-                      model.Elements[2][1],
-                      model.Elements[3][1]),
-        .z = HMM_Vec4(model.Elements[0][2],
-                      model.Elements[1][2],
-                      model.Elements[2][2],
-                      model.Elements[3][2]),
-        .w = HMM_Vec4(model.Elements[0][3],
-                      model.Elements[1][3],
-                      model.Elements[2][3],
-                      model.Elements[3][3])
+    sg_range r0 = {
+        .ptr = sim.state.draw_call.instances,
+        .size = sim.state.draw_call.icount * sizeof(sim_vs_inst_t)
     };
-    sg_update_buffer(sim.state.bind.vertex_buffers[1], &(sg_range){
-        .ptr = &v,
-        .size = sizeof(sim_vs_inst_t)
-    });
-    sim_end();
-
+    sg_update_buffer(sim.state.draw_call.bind.vertex_buffers[1], &r0);
     sg_begin_pass(&(sg_pass) {
         .action = {
             .colors[0] = {
                 .load_action = SG_LOADACTION_CLEAR,
-                .clear_value = { 0.f, 0.f, 0.f, 1.f }
+                .clear_value = sim.state.clear_color
             }
         },
         .swapchain = sglue_swapchain()
     });
-    sg_apply_pipeline(sim.state.pip);
-    sg_apply_bindings(&sim.state.bind);
+    sg_apply_pipeline(sim.state.draw_call.pip);
+    sg_apply_bindings(&sim.state.draw_call.bind);
     sg_apply_uniforms(SG_SHADERSTAGE_VS, SLOT_vs_params, &SG_RANGE(vs_params));
-    sg_draw(0, 36, 1);
+    sg_draw(0, sim.state.draw_call.vcount, sim.state.draw_call.icount);
     sg_end_pass();
-    
-//    sim.loop(diff);
     sg_commit();
+    
     memcpy(&sim.last_input, &sim.current_input, sizeof(sim_input_t));
     memset(&sim.current_input, 0, sizeof(sim_input_t));
-    
-    sg_destroy_buffer(sim.state.bind.vertex_buffers[0]);
-    sg_destroy_buffer(sim.state.bind.vertex_buffers[1]);
+    sg_destroy_buffer(sim.state.draw_call.bind.vertex_buffers[0]);
+    sg_destroy_buffer(sim.state.draw_call.bind.vertex_buffers[1]);
 }
 
 static void event(const sapp_event *e) {
@@ -665,9 +580,13 @@ void sim_cull_mode(int mode) {
 }
 
 void sim_begin(int mode) {
-    assert(!sim.state.draw_call.vertices);
+//    assert(!sim.state.draw_call.vertices);
+    if (sim.state.draw_call.vertices)
+        sim_end();
     sim.state.draw_call.vertices = malloc(0);
     sim.state.draw_call.vcount = 0;
+    sim.state.draw_call.instances = malloc(0);
+    sim.state.draw_call.icount = 0;
     switch (mode) {
         default:
             mode = SIM_DRAW_TRIANGLES;
@@ -716,7 +635,7 @@ void sim_color4f(float x, float y, float z, float w) {
     sim.state.current_vertex.color = HMM_Vec4(x, y, z, w);
 }
 
-void sim_flush(void) {
+void sim_draw(void) {
     sim.state.draw_call.instances = realloc(sim.state.draw_call.instances, ++sim.state.draw_call.icount * sizeof(sim_vs_inst_t));
     sim_vs_inst_t *inst = &sim.state.draw_call.instances[sim.state.draw_call.icount-1];
     hmm_mat4 *m = sim_matrix_stack_head(SIM_MATRIXMODE_MODELVIEW);
@@ -741,11 +660,11 @@ void sim_flush(void) {
 
 void sim_end(void) {
     assert(sim.state.draw_call.vertices && sim.state.draw_call.vcount);
-    //    assert(sim.state.draw_call.instances && sim.state.draw_call.icount);
+    assert(sim.state.draw_call.instances && sim.state.draw_call.icount);
     // push draw call
     free(sim.state.draw_call.vertices);
     sim.state.draw_call.vcount = 0;
     free(sim.state.draw_call.instances);
     sim.state.draw_call.icount = 0;
-    memset(&sim.state.draw_call, 0, sizeof(sim_draw_call_t));
+//    memset(&sim.state.draw_call, 0, sizeof(sim_draw_call_t));
 }

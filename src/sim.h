@@ -320,7 +320,7 @@ EXPORT void sim_normal3f(float x, float y, float z);
 EXPORT void sim_color4ub(unsigned char r, unsigned char g, unsigned char b, unsigned char a);
 EXPORT void sim_color3f(float x, float y, float z);
 EXPORT void sim_color4f(float x, float y, float z, float w);
-EXPORT void sim_flush(void);
+EXPORT void sim_draw(void);
 EXPORT void sim_end(void);
 
 #undef EXPORT
