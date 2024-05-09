@@ -878,6 +878,7 @@ static const char* file_extension(const char *path) {
 void sim_load_texture_path(const char *path) {
     assert(sg_query_image_state(sim.state.current_texture) == SG_RESOURCESTATE_VALID);
     assert(does_file_exist(path));
+    
 #define VALID_EXTS_SZ 11
     static const char *valid_extensions[VALID_EXTS_SZ] = {
         "jpg", "jpeg", "png", "bmp", "psd", "tga", "hdr", "pic", "ppm", "pgm", "qoi"
