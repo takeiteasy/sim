@@ -135,6 +135,7 @@ typedef struct {
     int vcount;
     sim_vs_inst_t *instances;
     int icount;
+    hmm_mat4 projection, texture_matrix;
     sg_pipeline pip;
     sg_bindings bind;
 } sim_draw_call_t;
@@ -258,9 +259,6 @@ static void frame(void) {
     const float t = (float)(sapp_frame_duration() * 60.0);
     sim.loop(t);
 
-    vs_params_t vs_params;
-    vs_params.texture_m = *sim_matrix_stack_head(SIM_MATRIXMODE_TEXTURE);
-    vs_params.projection = *sim_matrix_stack_head(SIM_MATRIXMODE_PROJECTION);
     sg_begin_pass(&(sg_pass) {
         .action = {
             .colors[0] = {
@@ -282,6 +280,9 @@ static void frame(void) {
                 sim_draw_call_t *call = (sim_draw_call_t*)cursor->data;
                 sg_apply_pipeline(call->pip);
                 sg_apply_bindings(&call->bind);
+                vs_params_t vs_params;
+                vs_params.texture_m = call->texture_matrix;
+                vs_params.projection = call->projection;
                 sg_apply_uniforms(SG_SHADERSTAGE_VS, SLOT_vs_params, &SG_RANGE(vs_params));
                 sg_draw(0, call->vcount, call->icount);
                 sg_destroy_buffer(call->bind.vertex_buffers[0]);
@@ -715,6 +716,9 @@ void sim_end(void) {
         .size = sim.state.draw_call.icount * sizeof(sim_vs_inst_t)
     };
     sg_update_buffer(sim.state.draw_call.bind.vertex_buffers[1], &r0);
+    
+    sim.state.draw_call.projection = *sim_matrix_stack_head(SIM_MATRIXMODE_PROJECTION);
+    sim.state.draw_call.texture_matrix = *sim_matrix_stack_head(SIM_MATRIXMODE_TEXTURE);
     sim_draw_call_t *draw_call = malloc(sizeof(sim_draw_call_t));
     memcpy(draw_call, &sim.state.draw_call, sizeof(sim_draw_call_t));
     sim_push_command(SIM_CMD_DRAW_CALL, draw_call);
