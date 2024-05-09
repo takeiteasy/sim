@@ -323,6 +323,12 @@ EXPORT void sim_color4f(float x, float y, float z, float w);
 EXPORT void sim_draw(void);
 EXPORT void sim_end(void);
 
+EXPORT int sim_empty_texture(int width, int height);
+EXPORT void sim_push_texture(int texture);
+EXPORT void sim_load_texture_path(const char *path);
+EXPORT void sim_load_texture_memory(unsigned char *data, int data_size);
+EXPORT void sim_release_texture(int texture);
+
 #undef EXPORT
 
 #if defined(__cplusplus)

@@ -3,7 +3,7 @@
 > [!WARNING]
 > Work in progress
 
-***s***_okol_ ***i***_mmediate_ ***m***_ode_ is a simple fixed-pipeline (legacy OpenGL) layer built on [sokol](https://github.com/floooh/sokol/) with built in batching. Inspired by [rlgl.h](https://github.com/raysan5/raylib/blob/master/src/rlgl.h) and [sokol_gl.h](https://github.com/floooh/sokol/blob/master/util/sokol_gl.h)
+***s***_okol_ ***i***_mmediate_ ***m***_ode_ is a simple fixed-pipeline (legacy OpenGL) layer built on [sokol](https://github.com/floooh/sokol/) with built in batching. Inspired by [rlgl.h](https://github.com/raysan5/raylib/blob/master/src/rlgl.h) and [sokol_gl.h](https://github.com/floooh/sokol/blob/master/util/sokol_gl.h). Designed to be _simple_ to use and bind to other languages.
 
 ## TODO
 
@@ -13,6 +13,11 @@
 - [ ] Change point size
 - [ ] Gamepad support ([libstem_gamepad](https://github.com/ThemsAllTook/libstem_gamepad))
 - [ ] Basic geometry rendering (draw_cube, draw_sphere, etc...)
+- [ ] Optional lighting+fog
+- [ ] Improve error handling/reporting
+- [ ] Fixed+variable framerate setting
+- [ ] Clipboard functions
+- [ ] Font rendering
 
 ## Dependencies
 

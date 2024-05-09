@@ -19,6 +19,8 @@ targets:
           type: folder
         - path: deps/
           type: folder
+        - path: etc/
+          type: folder
         - path: README.md
         - path: project.yml
         - path: Makefile

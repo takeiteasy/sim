@@ -27,7 +27,6 @@ else
 	endif
 endif
 
-NAME=sim
 INCLUDE=-Ideps -Isrc -Ibuild
 ARCH_PATH=deps/sokol-tools-bin/bin/$(ARCH)
 SHDC_PATH=$(ARCH_PATH)/sokol-shdc$(PROG_EXT)
@@ -35,13 +34,13 @@ SHDC_PATH=$(ARCH_PATH)/sokol-shdc$(PROG_EXT)
 default: test
 
 shader:
-	$(SHDC_PATH) -i src/sim.glsl -o src/sim.glsl.h -l $(SHDC_FLAGS)
+	$(SHDC_PATH) -i etc/sim.glsl -o src/sim.glsl.h -l $(SHDC_FLAGS)
 
 library: shader
-	$(CC) $(INCLUDE) -shared -fpic $(CFLAGS) src/sim.c -o build/lib$(NAME).$(LIB_EXT)
+	$(CC) $(INCLUDE) -shared -fpic $(CFLAGS) src/sim.c -o build/libsim.$(LIB_EXT)
 
 test: library
-	$(CC) $(INCLUDE) $(EXTRA_CFLAGS) $(CFLAGS) src/*.c -o build/$(NAME)_test$(PROG_EXT)
+	$(CC) $(INCLUDE) $(EXTRA_CFLAGS) $(CFLAGS) src/*.c -o build/sim_test$(PROG_EXT)
 
 all: shader library test
 

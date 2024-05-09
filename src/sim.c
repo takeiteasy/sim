@@ -35,8 +35,18 @@
 #define HANDMADE_MATH_NO_SSE
 #include "HandmadeMath.h"
 #include "sim.glsl.h"
+#define QOI_IMPLEMENTATION
+#include "qoi.h"
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_NO_GIF
+#include "stb_image.h"
 
 #if defined(SIM_WINDOWS)
+#include <windows.h>
+#include <io.h>
+#include <dirent.h>
+#define F_OK 0
+#define access _access
 #include <shlobj.h>
 #if !defined(_DLL)
 #include <shellapi.h>
@@ -67,6 +77,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
     return main(argc, argv);
 }
 #endif // !_DLL
+#else
+#include <unistd.h>
 #endif // SIM_WINDOWS
 
 #if !defined(DEFAULT_WINDOW_WIDTH)
@@ -151,6 +163,7 @@ typedef struct {
     sg_pipeline_desc pip_desc;
     sg_blend_state blend;
     int blend_mode;
+    sg_image current_texture;
 } sim_state_t;
 
 typedef struct sim_command_t {
@@ -282,7 +295,12 @@ static void frame(void) {
         sim_command_t *tmp = cursor->next;
         switch (cursor->type) {
             case SIM_CMD_VIEWPORT:
-            case SIM_CMD_SCISSOR_RECT:
+            case SIM_CMD_SCISSOR_RECT:;
+                sim_rect_t *rect = (sim_rect_t*)cursor->data;
+                if (cursor->type == SIM_CMD_VIEWPORT)
+                    sim_viewport(rect->x, rect->y, rect->w, rect->h);
+                else
+                    sim_scissor_rect(rect->x, rect->y, rect->w, rect->h);
                 break;
             case SIM_CMD_DRAW_CALL:;
                 sim_draw_call_t *call = (sim_draw_call_t*)cursor->data;
@@ -831,4 +849,126 @@ void sim_end(void) {
     sg_pipeline tmp = sim.state.draw_call.pip;
     memset(&sim.state.draw_call, 0, sizeof(sim_draw_call_t));
     sim.state.draw_call.pip = tmp;
+}
+
+int sim_empty_texture(int width, int height) {
+    assert(width && height);
+    sg_image_desc desc = {
+        .width = width,
+        .height = height
+    };
+    return sg_make_image(&desc).id;
+}
+
+void sim_push_texture(int texture) {
+    sg_image tmp = {.id = texture};
+    assert(sg_query_image_state(tmp) == SG_RESOURCESTATE_VALID);
+    sim.state.current_texture = tmp;
+}
+
+static int does_file_exist(const char *path) {
+    return !access(path, F_OK);
+}
+
+static const char* file_extension(const char *path) {
+    const char *dot = strrchr(path, '.');
+    return !dot || dot == path ? NULL : dot + 1;
+}
+
+void sim_load_texture_path(const char *path) {
+    assert(sg_query_image_state(sim.state.current_texture) == SG_RESOURCESTATE_VALID);
+    assert(does_file_exist(path));
+#define VALID_EXTS_SZ 11
+    static const char *valid_extensions[VALID_EXTS_SZ] = {
+        "jpg", "jpeg", "png", "bmp", "psd", "tga", "hdr", "pic", "ppm", "pgm", "qoi"
+    };
+    const char *ext = file_extension(path);
+    unsigned long ext_length = strlen(ext);
+    char *dup = strdup(ext);
+    for (int i = 0; i < ext_length; i++)
+        if (dup[i] >= 'A' && dup[i] <= 'Z')
+            dup[i] += 32;
+    int found = 0;
+    for (int i = 0; i < VALID_EXTS_SZ; i++) {
+        if (!strncmp(dup, valid_extensions[i], ext_length)) {
+            found = 1;
+            goto FOUND;
+        }
+    }
+    
+FOUND:
+    free(dup);
+    if (!found)
+        return;
+    
+    size_t sz = -1;
+    FILE *fh = fopen(path, "rb");
+    assert(fh);
+    fseek(fh, 0, SEEK_END);
+    sz = ftell(fh);
+    fseek(fh, 0, SEEK_SET);
+    
+    unsigned char *data = malloc(sz * sizeof(unsigned char));
+    fread(data, sz, 1, fh);
+    fclose(fh);
+    sim_load_texture_memory(data, (int)sz);
+    free(data);
+}
+
+#define QOI_MAGIC (((unsigned int)'q') << 24 | ((unsigned int)'o') << 16 | ((unsigned int)'i') <<  8 | ((unsigned int)'f'))
+
+static int check_if_qoi(unsigned char *data) {
+    return (data[0] << 24 | data[1] << 16 | data[2] << 8 | data[3]) == QOI_MAGIC;
+}
+
+#define RGBA(R, G, B, A) (((unsigned int)(A) << 24) | ((unsigned int)(R) << 16) | ((unsigned int)(G) << 8) | (B))
+
+static int* load_texture_data(unsigned char *data, int data_size, int *w, int *h) {
+    assert(data && data_size);
+    int _w, _h, c;
+    unsigned char *in = NULL;
+    if (check_if_qoi(data)) {
+        qoi_desc desc;
+        in = qoi_decode(data, data_size, &desc, 4);
+        _w = desc.width;
+        _h = desc.height;
+    } else
+        in = stbi_load_from_memory(data, data_size, &_w, &_h, &c, 4);
+    assert(in && _w && _h);
+    
+    int *buf = malloc(_w * _h * sizeof(int));
+    for (int x = 0; x < _w; x++)
+        for (int y = 0; y < _h; y++) {
+            unsigned char *p = in + (x + _w * y) * 4;
+            buf[y * _w + x] = RGBA(p[0], p[1], p[2], p[3]);
+        }
+    free(in);
+    if (w)
+        *w = _w;
+    if (h)
+        *h = _h;
+    return buf;
+}
+
+void sim_load_texture_memory(unsigned char *data, int data_size) {
+    assert(data && data_size);
+    assert(sg_query_image_state(sim.state.current_texture) == SG_RESOURCESTATE_VALID);
+    
+    int w, h;
+    int *tmp = load_texture_data(data, data_size, &w, &h);
+    assert(tmp && w && h);
+    sg_image_data desc = {
+        .subimage[0][0] = (sg_range) {
+            .ptr = tmp,
+            .size = w * h * sizeof(int)
+        }
+    };
+    sg_update_image(sim.state.current_texture, &desc);
+    free(tmp);
+}
+
+void sim_release_texture(int texture) {
+    sg_image tmp = {.id = texture};
+    if (sg_query_image_state(tmp) == SG_RESOURCESTATE_VALID)
+        sg_destroy_image(tmp);
 }
