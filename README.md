@@ -1,5 +1,34 @@
 # sim
 
+> [!WARNING]
+> Work in progress
+
+***s***_okol_ ***i***_mmediate_ ***m***_ode_ is a simple fixed-pipeline (legacy OpenGL) layer built on [sokol](https://github.com/floooh/sokol/) with built in batching. Inspired by [rlgl.h](https://github.com/raysan5/raylib/blob/master/src/rlgl.h) and [sokol_gl.h](https://github.com/floooh/sokol/blob/master/util/sokol_gl.h)
+
+## TODO
+
+- [X] Built in automatic batched rendering
+- [ ] Texture loading+rendering (stb_image.h+qoi)
+- [ ] Framebuffers
+- [ ] Change point size
+- [ ] Gamepad support
+- [ ] Basic geometry rendering (draw_cube, draw_sphere, etc...)
+
+## Dependencies
+
+- [floooh/sokol](https://github.com/floooh/sokol/) (zlib/libpng)
+    - sokol_gfx.h
+    - sokol_app.h
+    - sokol_glue.h
+    - sokol_time.h
+    - sokol_log.h
+- [HandmadeMath/HandmadeMath](https://github.com/HandmadeMath/HandmadeMath/)
+    - HandmadeMath.h
+- [nothings/stb](https://github.com/nothings/stb/)
+    - stb_image.h
+- [phoboslab/qoi](https://github.com/phoboslab/qoi/)
+    - qoi.h
+
 ## LICENSE
 ```
 The MIT License (MIT)

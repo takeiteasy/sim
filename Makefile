@@ -9,7 +9,7 @@ else
 	PROG_EXT=
 	ifeq ($(UNAME),Darwin)
 		LIB_EXT=dylib
-		CFLAGS=-x objective-c++ -DSOKOL_METAL -fobjc-arc -framework Metal -framework Cocoa -framework MetalKit -framework Quartz -framework AudioToolbox
+		CFLAGS=-x objective-c -DSOKOL_METAL -fobjc-arc -framework Metal -framework Cocoa -framework MetalKit -framework Quartz -framework AudioToolbox
 		ARCH:=$(shell uname -m)
 		SHDC_FLAGS=metal_macos
 		ifeq ($(ARCH),arm64)
@@ -29,28 +29,20 @@ endif
 
 NAME=sim
 INCLUDE=-Ideps -Isrc -Ibuild
+ARCH_PATH=deps/sokol-tools-bin/bin/$(ARCH)
+SHDC_PATH=$(ARCH_PATH)/sokol-shdc$(PROG_EXT)
 
-default: library
+default: test
 
-library:
+shader:
+	$(SHDC_PATH) -i src/sim.glsl -o src/sim.glsl.h -l $(SHDC_FLAGS)
+
+library: shader
 	$(CC) $(INCLUDE) -shared -fpic $(CFLAGS) src/sim.c -o build/lib$(NAME).$(LIB_EXT)
 
 test: library
 	$(CC) $(INCLUDE) $(EXTRA_CFLAGS) $(CFLAGS) src/*.c -o build/$(NAME)_test$(PROG_EXT)
 
-all: library test
-
-ARCH_PATH=deps/sokol-tools-bin/bin/$(ARCH)
-SHDC_PATH=$(ARCH_PATH)/sokol-shdc$(PROG_EXT)
-SHADERS=$(wildcard src/*.glsl)
-SHADER_OUTS=$(patsubst %,%.h,$(SHADERS))
-
-.SECONDEXPANSION:
-SHADER=$(patsubst %.h,%,$@)
-SHADER_OUT=$@
-%.glsl.h: $(SHADERS)
-	$(SHDC_PATH) -i $(SHADER) -o $(SHADER_OUT) -l $(SHDC_FLAGS)
-
-shaders: $(SHADER_OUTS)
+all: shader library test
 
 .PHONY: default all library test shaders

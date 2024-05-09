@@ -95,7 +95,7 @@ typedef struct {
 } sim_input_state_t;
 
 typedef struct {
-    sim_input_state_t keys[KEY_MENU+1];
+    sim_input_state_t keys[SIM_KEY_MENU+1];
     sim_input_state_t buttons[3];
     int modifier;
     struct {

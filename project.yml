@@ -30,4 +30,4 @@ targets:
         - sdk: Quartz.framework
     settings:
         HEADER_SEARCH_PATHS: [$(PROJECT_DIR)/deps, $(PROJECT_DIR)/src]
-        OTHER_CFLAGS: ["-x objective-c", -fenable-matrix, -DSIM_ENABLE_CONFIG, -DSIM_ENABLE_ARGUMENTS, -DSOKOL_METAL, -fobjc-arc]
+        OTHER_CFLAGS: ["-x objective-c", -DSOKOL_METAL, -fobjc-arc]
