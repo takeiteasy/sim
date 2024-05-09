@@ -11,7 +11,7 @@
 - [ ] Texture loading+rendering (stb_image.h+qoi)
 - [ ] Framebuffers
 - [ ] Change point size
-- [ ] Gamepad support
+- [ ] Gamepad support ([libstem_gamepad](https://github.com/ThemsAllTook/libstem_gamepad))
 - [ ] Basic geometry rendering (draw_cube, draw_sphere, etc...)
 
 ## Dependencies
@@ -22,11 +22,11 @@
     - sokol_glue.h
     - sokol_time.h
     - sokol_log.h
-- [HandmadeMath/HandmadeMath](https://github.com/HandmadeMath/HandmadeMath/)
+- [HandmadeMath/HandmadeMath](https://github.com/HandmadeMath/HandmadeMath/) (CC0-1.0)
     - HandmadeMath.h
-- [nothings/stb](https://github.com/nothings/stb/)
+- [nothings/stb](https://github.com/nothings/stb/) (MIT/Unlicense)
     - stb_image.h
-- [phoboslab/qoi](https://github.com/phoboslab/qoi/)
+- [phoboslab/qoi](https://github.com/phoboslab/qoi/) (MIT)
     - qoi.h
 
 ## LICENSE
