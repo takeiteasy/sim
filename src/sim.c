@@ -117,6 +117,8 @@ typedef struct {
 
 typedef struct {
     hmm_vec4 position;
+    hmm_vec3 normal;
+    hmm_vec2 texcoord;
     hmm_vec4 color;
 } sim_vertex_t;
 
@@ -146,6 +148,9 @@ typedef struct {
     sg_color clear_color;
     sim_draw_call_t draw_call;
     sim_vertex_t current_vertex;
+    sg_pipeline_desc pip_desc;
+    sg_blend_state blend;
+    int blend_mode;
 } sim_state_t;
 
 typedef struct sim_command_t {
@@ -171,6 +176,7 @@ static struct sim_t {
     sim_input_t last_input;
     sim_state_t state;
     sim_command_queue_t commands;
+    sg_shader shader;
 } sim = {
     .running = 0,
     .mouse_hidden = 0,
@@ -228,11 +234,14 @@ static void init(void) {
     if (sim.init)
         sim.init();
     
-    sim.state.draw_call.pip = sg_make_pipeline(&(sg_pipeline_desc){
+    sim.shader = sg_make_shader(sim_shader_desc(sg_query_backend()));
+    sim.state.pip_desc = (sg_pipeline_desc) {
         .layout = {
             .buffers[1].step_func = SG_VERTEXSTEP_PER_INSTANCE,
             .attrs = {
                 [ATTR_vs_position] = { .format=SG_VERTEXFORMAT_FLOAT4, .buffer_index=0 },
+                [ATTR_vs_normal] = { .format=SG_VERTEXFORMAT_FLOAT3, .buffer_index=0 },
+                [ATTR_vs_texcoord] = { .format=SG_VERTEXFORMAT_FLOAT2, .buffer_index=0 },
                 [ATTR_vs_color_v] = { .format=SG_VERTEXFORMAT_FLOAT4, .buffer_index=0 },
                 [ATTR_vs_inst_mat_x] = { .format=SG_VERTEXFORMAT_FLOAT4, .buffer_index=1 },
                 [ATTR_vs_inst_mat_y] = { .format=SG_VERTEXFORMAT_FLOAT4, .buffer_index=1 },
@@ -240,13 +249,13 @@ static void init(void) {
                 [ATTR_vs_inst_mat_w] = { .format=SG_VERTEXFORMAT_FLOAT4, .buffer_index=1 }
             }
         },
-        .shader = sg_make_shader(sim_shader_desc(sg_query_backend())),
+        .shader = sim.shader,
         .cull_mode = SG_CULLMODE_BACK,
         .depth = {
             .compare = SG_COMPAREFUNC_LESS_EQUAL,
             .write_enabled = true
         }
-    });
+    };
     
     for (int i = 0; i < SIM_MATRIXMODE_COUNT; i++) {
         sim_matrix_stack_t *stack = &sim.state.matrix_stack[i];
@@ -256,7 +265,7 @@ static void init(void) {
 }
 
 static void frame(void) {
-    const float t = (float)(sapp_frame_duration() * 60.0);
+    const float t = (float)(sapp_frame_duration() * 60.);
     sim.loop(t);
 
     sg_begin_pass(&(sg_pass) {
@@ -268,7 +277,6 @@ static void frame(void) {
         },
         .swapchain = sglue_swapchain()
     });
-    
     sim_command_t *cursor = sim.commands.head;
     while (cursor) {
         sim_command_t *tmp = cursor->next;
@@ -281,12 +289,13 @@ static void frame(void) {
                 sg_apply_pipeline(call->pip);
                 sg_apply_bindings(&call->bind);
                 vs_params_t vs_params;
-                vs_params.texture_m = call->texture_matrix;
+                vs_params.texture_matrix = call->texture_matrix;
                 vs_params.projection = call->projection;
                 sg_apply_uniforms(SG_SHADERSTAGE_VS, SLOT_vs_params, &SG_RANGE(vs_params));
                 sg_draw(0, call->vcount, call->icount);
                 sg_destroy_buffer(call->bind.vertex_buffers[0]);
                 sg_destroy_buffer(call->bind.vertex_buffers[1]);
+                sg_destroy_pipeline(call->pip);
                 break;
             default:
                 abort();
@@ -595,23 +604,112 @@ void sim_clear_color(float r, float g, float b, float a) {
 }
 
 void sim_viewport(int x, int y, int width, int height) {
-    // ...
+    sim_rect_t *rect = malloc(sizeof(sim_rect_t));
+    rect->x = x;
+    rect->y = y;
+    rect->w = width;
+    rect->h = height;
+    sim_push_command(SIM_CMD_VIEWPORT, rect);
 }
 
 void sim_scissor_rect(int x, int y, int width, int height) {
-    // ...
+    sim_rect_t *rect = malloc(sizeof(sim_rect_t));
+    rect->x = x;
+    rect->y = y;
+    rect->w = width;
+    rect->h = height;
+    sim_push_command(SIM_CMD_SCISSOR_RECT, rect);
 }
 
 void sim_blend_mode(int mode) {
-    // ...
+    if (mode == sim.state.blend_mode)
+        return;
+    sg_blend_state *blend = &sim.state.blend;
+    switch (mode) {
+        default:
+        case SIM_BLEND_NONE:
+            blend->enabled = false;
+            blend->src_factor_rgb = SG_BLENDFACTOR_ONE;
+            blend->dst_factor_rgb = SG_BLENDFACTOR_ZERO;
+            blend->op_rgb = SG_BLENDOP_ADD;
+            blend->src_factor_alpha = SG_BLENDFACTOR_ONE;
+            blend->dst_factor_alpha = SG_BLENDFACTOR_ZERO;
+            blend->op_alpha = SG_BLENDOP_ADD;
+            break;
+        case SIM_BLEND_BLEND:
+            blend->enabled = true;
+            blend->src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+            blend->dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+            blend->op_rgb = SG_BLENDOP_ADD;
+            blend->src_factor_alpha = SG_BLENDFACTOR_ONE;
+            blend->dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+            blend->op_alpha = SG_BLENDOP_ADD;
+            break;
+        case SIM_BLEND_ADD:
+            blend->enabled = true;
+            blend->src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+            blend->dst_factor_rgb = SG_BLENDFACTOR_ONE;
+            blend->op_rgb = SG_BLENDOP_ADD;
+            blend->src_factor_alpha = SG_BLENDFACTOR_ZERO;
+            blend->dst_factor_alpha = SG_BLENDFACTOR_ONE;
+            blend->op_alpha = SG_BLENDOP_ADD;
+            break;
+        case SIM_BLEND_MOD:
+            blend->enabled = true;
+            blend->src_factor_rgb = SG_BLENDFACTOR_DST_COLOR;
+            blend->dst_factor_rgb = SG_BLENDFACTOR_ZERO;
+            blend->op_rgb = SG_BLENDOP_ADD;
+            blend->src_factor_alpha = SG_BLENDFACTOR_ZERO;
+            blend->dst_factor_alpha = SG_BLENDFACTOR_ONE;
+            blend->op_alpha = SG_BLENDOP_ADD;
+            break;
+        case SIM_BLEND_MUL:
+            blend->enabled = true;
+            blend->src_factor_rgb = SG_BLENDFACTOR_DST_COLOR;
+            blend->dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+            blend->op_rgb = SG_BLENDOP_ADD;
+            blend->src_factor_alpha = SG_BLENDFACTOR_DST_ALPHA;
+            blend->dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+            blend->op_alpha = SG_BLENDOP_ADD;
+            break;
+    }
+    sim.state.blend_mode = mode;
 }
 
 void sim_depth_func(int func) {
-    // ...
+    if (func == sim.state.pip_desc.depth.compare)
+        return;
+    switch (func) {
+        default:
+        case SIM_CMP_DEFAULT:
+            func = SIM_CMP_LESS_EQUAL;
+        case SIM_CMP_NEVER:
+        case SIM_CMP_LESS:
+        case SIM_CMP_EQUAL:
+        case SIM_CMP_LESS_EQUAL:
+        case SIM_CMP_GREATER:
+        case SIM_CMP_NOT_EQUAL:
+        case SIM_CMP_GREATER_EQUAL:
+        case SIM_CMP_ALWAYS:
+        case SIM_CMP_NUM:
+            sim.state.pip_desc.depth.compare = (sg_compare_func)func;
+            break;
+    }
 }
 
 void sim_cull_mode(int mode) {
-    // ...
+    if (mode == sim.state.pip_desc.cull_mode)
+        return;
+    switch (mode) {
+        default:
+        case SIM_CULL_DEFAULT:
+            mode = SIM_CULL_BACK;
+        case SIM_CULL_NONE:
+        case SIM_CULL_FRONT:
+        case SIM_CULL_BACK:
+            sim.state.pip_desc.cull_mode = mode;
+            break;
+    }
 }
 
 void sim_begin(int mode) {
@@ -630,6 +728,7 @@ void sim_begin(int mode) {
         case SIM_DRAW_LINES:
         case SIM_DRAW_LINE_STRIP:
         case SIM_DRAW_TRIANGLE_STRIP:
+            sim.state.pip_desc.primitive_type = mode;
             break;
     }
 }
@@ -648,11 +747,11 @@ void sim_vertex3f(float x, float y, float z) {
 }
 
 void sim_texcoord2f(float x, float y) {
-    // ...
+    sim.state.current_vertex.texcoord = HMM_Vec2(x, y);
 }
 
 void sim_normal3f(float x, float y, float z) {
-    // ...
+    sim.state.current_vertex.normal = HMM_Vec3(x, y, z);
 }
 
 void sim_color4ub(unsigned char r, unsigned char g, unsigned char b, unsigned char a) {
@@ -717,8 +816,10 @@ void sim_end(void) {
     };
     sg_update_buffer(sim.state.draw_call.bind.vertex_buffers[1], &r0);
     
+    sim.state.draw_call.pip = sg_make_pipeline(&sim.state.pip_desc);
     sim.state.draw_call.projection = *sim_matrix_stack_head(SIM_MATRIXMODE_PROJECTION);
     sim.state.draw_call.texture_matrix = *sim_matrix_stack_head(SIM_MATRIXMODE_TEXTURE);
+    
     sim_draw_call_t *draw_call = malloc(sizeof(sim_draw_call_t));
     memcpy(draw_call, &sim.state.draw_call, sizeof(sim_draw_call_t));
     sim_push_command(SIM_CMD_DRAW_CALL, draw_call);
