@@ -48,8 +48,10 @@ static int indices[] = {
     22, 21, 20,  23, 22, 20
 };
 
+static int texture = 0;
+
 static void init(void) {
-    
+    texture = sim_load_texture_path("/Users/george/Downloads/pear.jpg");
 }
 
 static void loop(double t) {
@@ -67,7 +69,7 @@ static void loop(double t) {
                 0.0f, 1.0f, 0.0f);
     sim_rotate(rx, 1.f, 0.f, 0.f);
     sim_rotate(ry, 0.f, 1.f, 0.f);
-    
+
     sim_begin(SIM_DRAW_TRIANGLES);
     for (int i = 0; i < 36; i++) {
         int j = indices[i];
@@ -75,8 +77,11 @@ static void loop(double t) {
         sim_color4f(data[4], data[5], data[6], data[7]);
         sim_vertex3f(data[0], data[1], data[2]);
     }
+    
+    sim_push_texture(texture);
     sim_draw();
     sim_end();
+    sim_pop_texture();
 }
 
 static void deinit(void) {

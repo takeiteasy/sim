@@ -7,17 +7,24 @@
 
 ## TODO
 
-- [X] Built in automatic batched rendering
-- [ ] Texture loading+rendering (stb_image.h+qoi)
+- [X] ~~Built in automatic batched rendering~~
+- [~] Textures
+    - [X] ~~Loading~~ (stb_image.h+qoi.h)
+    - [ ] Rendering
 - [ ] Framebuffers
-- [ ] Change point size
+- [ ] Point size setting
 - [ ] Gamepad support ([libstem_gamepad](https://github.com/ThemsAllTook/libstem_gamepad))
-- [ ] Basic geometry rendering (draw_cube, draw_sphere, etc...)
-- [ ] Optional lighting+fog
+- [~] Basic geometry
+    - [X] ~~Loading~~
+    - [ ] Rendering
+- [ ] Optional lighting
+- [ ] Optional fog
 - [ ] Improve error handling/reporting
 - [ ] Fixed+variable framerate setting
 - [ ] Clipboard functions
-- [ ] Font rendering
+- [ ] Fonts
+    - [ ] Loading (stb_truetype.h?)
+    - [ ] Rendering
 
 ## Dependencies
 

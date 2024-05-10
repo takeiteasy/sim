@@ -206,6 +206,7 @@ enum {
     SIM_MATRIXMODE_MODELVIEW  = 0,
     SIM_MATRIXMODE_PROJECTION,
     SIM_MATRIXMODE_TEXTURE,
+    SIM_MATRIXMODE_SHAPE,
     SIM_MATRIXMODE_COUNT
 };
 
@@ -215,11 +216,6 @@ enum {
     SIM_DRAW_LINE_STRIP = 0x0003,
     SIM_DRAW_TRIANGLES = 0x0004,
     SIM_DRAW_TRIANGLE_STRIP = 0x0005
-};
-
-enum {
-    SIM_TEXTURE_2D = 0x0001,
-    SIM_TEXTURE_3D = 0x0002
 };
 
 enum {
@@ -248,6 +244,21 @@ enum {
     SIM_CULL_NONE,
     SIM_CULL_FRONT,
     SIM_CULL_BACK
+};
+
+enum {
+    SIM_FILTER_DEFAULT = 0,
+    SIM_FILTER_NONE,
+    SIM_FILTER_NEAREST,
+    SIM_FILTER_LINEAR
+};
+
+enum {
+    SIM_WRAP_DEFAULT = 0,
+    SIM_WRAP_REPEAT,
+    SIM_WRAP_CLAMP_TO_EDGE,
+    SIM_WRAP_CLAMP_TO_BORDER,
+    SIM_WRAP_MIRRORED_REPEAT
 };
 
 EXPORT int sim_run(int window_width,
@@ -325,9 +336,26 @@ EXPORT void sim_end(void);
 
 EXPORT int sim_empty_texture(int width, int height);
 EXPORT void sim_push_texture(int texture);
-EXPORT void sim_load_texture_path(const char *path);
-EXPORT void sim_load_texture_memory(unsigned char *data, int data_size);
+EXPORT void sim_pop_texture(void);
+EXPORT int sim_load_texture_path(const char *path);
+EXPORT int sim_load_texture_memory(unsigned char *data, int data_size);
+EXPORT void sim_set_texture_filter(int min, int mag);
+EXPORT void sim_set_texture_wrap(int wrap_u, int wrap_v);
 EXPORT void sim_release_texture(int texture);
+
+EXPORT void sim_shape_color4ub(unsigned char r, unsigned char g, unsigned char b, unsigned char a);
+EXPORT void sim_shape_color3f(float x, float y, float z);
+EXPORT void sim_shape_color4f(float x, float y, float z, float w);
+EXPORT void sim_shape_enable_random_colors(int enable);
+EXPORT void sim_shape_enable_merge(int enable);
+EXPORT void sim_load_plane(float width, float depth, int tiles);
+EXPORT void sim_load_cube(float width, float height, float depth, int tiles);
+EXPORT void sim_load_sphere(float radius, int slices, int stacks);
+EXPORT void sim_load_cylinder(float radius, float height, int slices, int stacks);
+EXPORT void sim_load_torus(float radius, float ring_radius, int sides, int rings);
+EXPORT void sim_push_shape(void);
+
+EXPORT
 
 #undef EXPORT
 

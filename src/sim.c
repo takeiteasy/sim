@@ -31,6 +31,7 @@
 #include "sokol/sokol_glue.h"
 #include "sokol/sokol_time.h"
 #include "sokol/sokol_log.h"
+#include "sokol/util/sokol_shape.h"
 #define HANDMADE_MATH_IMPLEMENTATION
 #define HANDMADE_MATH_NO_SSE
 #include "HandmadeMath.h"
@@ -152,6 +153,7 @@ typedef struct {
     hmm_mat4 projection, texture_matrix;
     sg_pipeline pip;
     sg_bindings bind;
+    sg_image texture;
 } sim_draw_call_t;
 
 typedef struct {
@@ -164,6 +166,13 @@ typedef struct {
     sg_blend_state blend;
     int blend_mode;
     sg_image current_texture;
+    sg_sampler_desc sampler_desc;
+    struct {
+        sshape_buffer_t buffer;
+        sg_color color;
+        int random_colors;
+        int merge;
+    } shape;
 } sim_state_t;
 
 typedef struct sim_command_t {
@@ -275,6 +284,8 @@ static void init(void) {
         stack->count = 1;
         stack->stack[0] = HMM_Mat4();
     }
+    
+    sim.state.shape.color = (sg_color){0.f, 0.f, 0.f, 1.f};
 }
 
 static void frame(void) {
@@ -313,6 +324,7 @@ static void frame(void) {
                 sg_draw(0, call->vcount, call->icount);
                 sg_destroy_buffer(call->bind.vertex_buffers[0]);
                 sg_destroy_buffer(call->bind.vertex_buffers[1]);
+                sg_destroy_sampler(call->bind.fs.samplers[SLOT_sampler_v]);
                 sg_destroy_pipeline(call->pip);
                 break;
             default:
@@ -827,6 +839,8 @@ void sim_end(void) {
     sim.state.draw_call.bind = (sg_bindings) {
         .vertex_buffers[0] = sg_make_buffer(&b0),
         .vertex_buffers[1] = sg_make_buffer(&b1),
+        .fs.images[SLOT_texture_v] = sim.state.current_texture,
+        .fs.samplers = sg_make_sampler(&sim.state.sampler_desc)
     };
     sg_range r0 = {
         .ptr = sim.state.draw_call.instances,
@@ -848,6 +862,8 @@ void sim_end(void) {
     sim.state.draw_call.icount = 0;
     sg_pipeline tmp = sim.state.draw_call.pip;
     memset(&sim.state.draw_call, 0, sizeof(sim_draw_call_t));
+    memset(&sim.state.sampler_desc, 0, sizeof(sg_sampler_desc));
+    sim_pop_texture();
     sim.state.draw_call.pip = tmp;
 }
 
@@ -855,7 +871,9 @@ int sim_empty_texture(int width, int height) {
     assert(width && height);
     sg_image_desc desc = {
         .width = width,
-        .height = height
+        .height = height,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage = SG_USAGE_STREAM
     };
     return sg_make_image(&desc).id;
 }
@@ -864,6 +882,10 @@ void sim_push_texture(int texture) {
     sg_image tmp = {.id = texture};
     assert(sg_query_image_state(tmp) == SG_RESOURCESTATE_VALID);
     sim.state.current_texture = tmp;
+}
+
+void sim_pop_texture(void) {
+    memset(&sim.state.current_texture, 0, sizeof(sg_image));
 }
 
 static int does_file_exist(const char *path) {
@@ -875,10 +897,8 @@ static const char* file_extension(const char *path) {
     return !dot || dot == path ? NULL : dot + 1;
 }
 
-void sim_load_texture_path(const char *path) {
-    assert(sg_query_image_state(sim.state.current_texture) == SG_RESOURCESTATE_VALID);
+int sim_load_texture_path(const char *path) {
     assert(does_file_exist(path));
-    
 #define VALID_EXTS_SZ 11
     static const char *valid_extensions[VALID_EXTS_SZ] = {
         "jpg", "jpeg", "png", "bmp", "psd", "tga", "hdr", "pic", "ppm", "pgm", "qoi"
@@ -900,7 +920,7 @@ void sim_load_texture_path(const char *path) {
 FOUND:
     free(dup);
     if (!found)
-        return;
+        return 0;
     
     size_t sz = -1;
     FILE *fh = fopen(path, "rb");
@@ -912,8 +932,9 @@ FOUND:
     unsigned char *data = malloc(sz * sizeof(unsigned char));
     fread(data, sz, 1, fh);
     fclose(fh);
-    sim_load_texture_memory(data, (int)sz);
+    int result = sim_load_texture_memory(data, (int)sz);
     free(data);
+    return result;
 }
 
 #define QOI_MAGIC (((unsigned int)'q') << 24 | ((unsigned int)'o') << 16 | ((unsigned int)'i') <<  8 | ((unsigned int)'f'))
@@ -951,25 +972,158 @@ static int* load_texture_data(unsigned char *data, int data_size, int *w, int *h
     return buf;
 }
 
-void sim_load_texture_memory(unsigned char *data, int data_size) {
+int sim_load_texture_memory(unsigned char *data, int data_size) {
     assert(data && data_size);
-    assert(sg_query_image_state(sim.state.current_texture) == SG_RESOURCESTATE_VALID);
-    
     int w, h;
     int *tmp = load_texture_data(data, data_size, &w, &h);
     assert(tmp && w && h);
+    sg_image texture = { .id=sim_empty_texture(w, h) };
     sg_image_data desc = {
         .subimage[0][0] = (sg_range) {
             .ptr = tmp,
             .size = w * h * sizeof(int)
         }
     };
-    sg_update_image(sim.state.current_texture, &desc);
+    sg_update_image(texture, &desc);
     free(tmp);
+    return texture.id;
+}
+
+void sim_set_texture_filter(int min, int mag) {
+    assert(sg_query_image_state(sim.state.current_texture) == SG_RESOURCESTATE_VALID);
+#define SET_FILTER(NAME)                                 \
+    switch ((NAME)) {                                    \
+        case SIM_FILTER_DEFAULT:                         \
+            NAME = SIM_FILTER_NONE;                      \
+        case SIM_FILTER_NONE:                            \
+        case SIM_FILTER_NEAREST:                         \
+        case SIM_FILTER_LINEAR:                          \
+            sim.state.sampler_desc.NAME##_filter = NAME; \
+            break;                                       \
+        default:                                         \
+            abort();                                     \
+    }
+    SET_FILTER(min);
+    SET_FILTER(mag);
+}
+
+void sim_set_texture_wrap(int wrap_u, int wrap_v) {
+    assert(sg_query_image_state(sim.state.current_texture) == SG_RESOURCESTATE_VALID);
+#define SET_WRAP(NAME)                          \
+    switch (NAME) {                             \
+        case SIM_WRAP_DEFAULT:                  \
+    NAME = SIM_WRAP_REPEAT;                     \
+        case SIM_WRAP_REPEAT:                   \
+        case SIM_WRAP_CLAMP_TO_EDGE:            \
+        case SIM_WRAP_CLAMP_TO_BORDER:          \
+        case SIM_WRAP_MIRRORED_REPEAT:          \
+            sim.state.sampler_desc.NAME = NAME; \
+            break;                              \
+    }
+    SET_WRAP(wrap_u);
+    SET_WRAP(wrap_v);
 }
 
 void sim_release_texture(int texture) {
     sg_image tmp = {.id = texture};
     if (sg_query_image_state(tmp) == SG_RESOURCESTATE_VALID)
         sg_destroy_image(tmp);
+}
+
+void sim_shape_color4ub(unsigned char r, unsigned char g, unsigned char b, unsigned char a) {
+    sim.state.shape.color = (sg_color) {
+        .r = (float)r / 255.f,
+        .g = (float)g / 255.f,
+        .b = (float)b / 255.f,
+        .a = (float)a / 255.f
+    };
+}
+
+void sim_shape_color3f(float x, float y, float z) {
+    sim.state.shape.color = (sg_color) {.r = x, .g = y, .b = z, .a = 1.f};
+}
+
+void sim_shape_color4f(float x, float y, float z, float w) {
+    sim.state.shape.color = (sg_color) {.r = x, .g = y, .b = z, .a = w};
+}
+
+void sim_shape_enable_random_colors(int enable) {
+    sim.state.shape.random_colors = enable;
+}
+
+void sim_shape_enable_merge(int enable) {
+    sim.state.shape.merge = enable;
+}
+
+#define PUSH_SHAPE(NAME)                                                                      \
+    sshape_vertex_t *vertices = malloc(size.vertices.num * sizeof(sshape_vertex_t));          \
+    uint16_t *indices = malloc(size.indices.num * sizeof(uint16_t));                          \
+    desc.color = sshape_color_4f(sim.state.shape.color.r,                                     \
+                                 sim.state.shape.color.g,                                     \
+                                 sim.state.shape.color.b,                                     \
+                                 sim.state.shape.color.a);                                    \
+    desc.merge = sim.state.shape.merge;                                                       \
+    desc.random_colors = sim.state.shape.random_colors;                                       \
+    memcpy(&desc.transform, sim_matrix_stack_head(SIM_MATRIXMODE_SHAPE), 16 * sizeof(float)); \
+    sim.state.shape.buffer = sshape_build_##NAME(&sim.state.shape.buffer, &desc);             \
+    free(vertices);                                                                           \
+    free(indices);
+
+void sim_load_plane(float width, float depth, int tiles) {
+    sshape_sizes_t size = sshape_plane_sizes(tiles);
+    sshape_plane_t desc = {
+        .width = width,
+        .depth = depth,
+        .tiles = tiles
+    };
+    PUSH_SHAPE(plane);
+}
+
+void sim_load_cube(float width, float height, float depth, int tiles) {
+    sshape_sizes_t size = sshape_box_sizes(tiles);
+    sshape_box_t desc = {
+        .width = width,
+        .height = height,
+        .depth = depth,
+        .tiles = tiles
+    };
+    PUSH_SHAPE(box);
+}
+
+void sim_load_sphere(float radius, int slices, int stacks) {
+    sshape_sizes_t size = sshape_sphere_sizes(slices, stacks);
+    sshape_sphere_t desc = {
+        .radius = radius,
+        .slices = slices,
+        .stacks = stacks
+    };
+    PUSH_SHAPE(sphere);
+}
+
+void sim_load_cylinder(float radius, float height, int slices, int stacks) {
+    sshape_sizes_t size = sshape_cylinder_sizes(slices, stacks);
+    sshape_cylinder_t desc = {
+        .radius = radius,
+        .height = height,
+        .slices = slices,
+        .stacks = stacks
+    };
+    PUSH_SHAPE(cylinder);
+}
+
+void sim_load_torus(float radius, float ring_radius, int sides, int rings) {
+    sshape_sizes_t size = sshape_torus_sizes(sides, rings);
+    sshape_torus_t desc = {
+        .radius = radius,
+        .ring_radius = ring_radius,
+        .sides = sides,
+        .rings = rings
+    };
+    PUSH_SHAPE(torus);
+}
+
+void sim_push_shape(void) {
+    // load shape vertices from buffer ...
+    sim.state.shape.random_colors = 0;
+    sim.state.shape.merge = 0;
 }
