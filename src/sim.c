@@ -154,6 +154,7 @@ typedef struct {
     sg_pipeline pip;
     sg_bindings bind;
     sg_image texture;
+    int keep_vbuf;
 } sim_draw_call_t;
 
 typedef struct {
@@ -324,7 +325,8 @@ static void frame(void) {
                 vs_params.projection = call->projection;
                 sg_apply_uniforms(SG_SHADERSTAGE_VS, SLOT_vs_params, &SG_RANGE(vs_params));
                 sg_draw(0, call->vcount, call->icount);
-                sg_destroy_buffer(call->bind.vertex_buffers[0]);
+                if (!call->keep_vbuf)
+                    sg_destroy_buffer(call->bind.vertex_buffers[0]);
                 sg_destroy_buffer(call->bind.vertex_buffers[1]);
                 sg_destroy_sampler(call->bind.fs.samplers[SLOT_sampler_v]);
                 sg_destroy_pipeline(call->pip);
@@ -422,6 +424,10 @@ int sim_window_width(void) {
 
 int sim_window_height(void) {
     return sim.running ? sapp_height() : -1;
+}
+
+float sim_window_aspect_ratio(void) {
+    return (float)sim_window_width() / (float)sim_window_height();
 }
 
 int sim_is_window_fullscreen(void) {
@@ -848,10 +854,22 @@ void sim_draw(void) {
 void sim_end(void) {
     if (!sim.state.draw_call.instances || !sim.state.draw_call.icount)
         goto BAIL;
+   
+    static sg_buffer_desc b1 = {
+        .size = sizeof(sim_vs_inst_t),
+        .usage = SG_USAGE_STREAM
+    };
+    sg_buffer vbuf = {.id=SG_INVALID_ID};
     
-    sg_buffer vbuf;
+    sim_draw_call_t *draw_call = malloc(sizeof(sim_draw_call_t));
+    sim.state.draw_call.pip = sg_make_pipeline(&sim.state.pip_desc);
+    sim.state.draw_call.projection = *sim_matrix_stack_head(SIM_MATRIXMODE_PROJECTION);
+    sim.state.draw_call.texture_matrix = *sim_matrix_stack_head(SIM_MATRIXMODE_TEXTURE);
+    
     if (sim.state.current_buffer.id != SG_INVALID_ID) {
         vbuf = sim.state.current_buffer;
+        sim.state.draw_call.keep_vbuf = 1;
+        sim.state.current_buffer.id = SG_INVALID_ID;
         goto SKIP;
     }
     
@@ -862,11 +880,7 @@ void sim_end(void) {
         }
     };
     vbuf = sg_make_buffer(&b0);
-    
-    sg_buffer_desc b1 = {
-        .size = sizeof(sim_vs_inst_t),
-        .usage = SG_USAGE_STREAM
-    };
+    sim.state.draw_call.keep_vbuf = 0;
     
 SKIP:
     sim.state.draw_call.bind = (sg_bindings) {
@@ -880,12 +894,6 @@ SKIP:
         .size = sim.state.draw_call.icount * sizeof(sim_vs_inst_t)
     };
     sg_update_buffer(sim.state.draw_call.bind.vertex_buffers[1], &r0);
-    
-    sim.state.draw_call.pip = sg_make_pipeline(&sim.state.pip_desc);
-    sim.state.draw_call.projection = *sim_matrix_stack_head(SIM_MATRIXMODE_PROJECTION);
-    sim.state.draw_call.texture_matrix = *sim_matrix_stack_head(SIM_MATRIXMODE_TEXTURE);
-    
-    sim_draw_call_t *draw_call = malloc(sizeof(sim_draw_call_t));
     memcpy(draw_call, &sim.state.draw_call, sizeof(sim_draw_call_t));
     sim_push_command(SIM_CMD_DRAW_CALL, draw_call);
     
@@ -1090,7 +1098,8 @@ int sim_store_buffer(void) {
 
 void sim_load_buffer(int buffer) {
     sg_buffer buf = {.id = buffer};
-    assert(sg_query_buffer_state((sim.state.current_buffer = buf)) == SG_RESOURCESTATE_VALID);
+    assert(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    sim.state.current_buffer = buf;
 }
 
 void sim_release_buffer(int buffer) {

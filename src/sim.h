@@ -54,6 +54,8 @@ extern "C" {
 #define EXPORT
 #endif
 
+#define SIM_DONT_CARE 0
+
 enum {
     SIM_KEY_INVALID          = 0,
     SIM_KEY_SPACE            = 32,
@@ -263,6 +265,7 @@ EXPORT int sim_run(void);
 
 EXPORT int sim_window_width(void);
 EXPORT int sim_window_height(void);
+EXPORT float sim_window_aspect_ratio(void);
 EXPORT int sim_is_window_fullscreen(void);
 EXPORT void sim_toggle_fullscreen(void);
 EXPORT int sim_is_cursor_visible(void);
