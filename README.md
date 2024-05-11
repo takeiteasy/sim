@@ -8,17 +8,16 @@
 ## TODO
 
 - [X] ~~Built in automatic batched rendering~~
-- [X] Textures
-    - [X] ~~Loading~~ (stb_image.h+qoi.h)
-    - [ ] Rendering
+- [X] ~~Textures~~ (stb_image.h+qoi.h)
 - [ ] Framebuffers
+- [X] Storable vertex buffers (not working yet)
 - [ ] Point size setting
 - [ ] Gamepad support ([libstem_gamepad](https://github.com/ThemsAllTook/libstem_gamepad))
 - [ ] Optional lighting
 - [ ] Optional fog
 - [ ] Improve error handling/reporting
 - [ ] Fixed+variable framerate setting
-- [ ] Clipboard functions
+- [ ] Clipboard+dropped files handling
 
 ## Dependencies
 
