@@ -52,7 +52,6 @@ void main() {
 @end
 
 @fs fs
-
 uniform texture2D texture_v;
 uniform sampler sampler_v;
 
@@ -62,7 +61,7 @@ in vec4 out_color;
 out vec4 frag_color;
 
 void main() {
-    frag_color = texture(sampler2D(texture_v, sampler_v), out_texcoord.xy) * out_color;
+    frag_color = texture(sampler2D(texture_v, sampler_v), out_texcoord.xy) * color;
 }
 @end
 

@@ -167,12 +167,7 @@ typedef struct {
     int blend_mode;
     sg_image current_texture;
     sg_sampler_desc sampler_desc;
-    struct {
-        sshape_buffer_t buffer;
-        sg_color color;
-        int random_colors;
-        int merge;
-    } shape;
+    hmm_vec4 shape_color;
 } sim_state_t;
 
 typedef struct sim_command_t {
@@ -285,7 +280,14 @@ static void init(void) {
         stack->stack[0] = HMM_Mat4();
     }
     
-    sim.state.shape.color = (sg_color){0.f, 0.f, 0.f, 1.f};
+    sim.state.shape_color = HMM_Vec4(0.f, 0.f, 0.f, 1.f);
+    sim.state.matrix_stack[SIM_MATRIXMODE_TEXTURE].stack[0] = HMM_Mat4d(1.f);
+    sim.state.blend_mode = -1;
+    sim_blend_mode(SIM_BLEND_DEFAULT);
+    sim.state.pip_desc.depth.compare = -1;
+    sim_depth_func(SIM_CMP_DEFAULT);
+    sim.state.pip_desc.cull_mode = -1;
+    sim_cull_mode(SIM_CULL_DEFAULT);
 }
 
 static void frame(void) {
@@ -656,7 +658,6 @@ void sim_blend_mode(int mode) {
         return;
     sg_blend_state *blend = &sim.state.blend;
     switch (mode) {
-        default:
         case SIM_BLEND_NONE:
             blend->enabled = false;
             blend->src_factor_rgb = SG_BLENDFACTOR_ONE;
@@ -693,6 +694,7 @@ void sim_blend_mode(int mode) {
             blend->dst_factor_alpha = SG_BLENDFACTOR_ONE;
             blend->op_alpha = SG_BLENDOP_ADD;
             break;
+        default:
         case SIM_BLEND_MUL:
             blend->enabled = true;
             blend->src_factor_rgb = SG_BLENDFACTOR_DST_COLOR;
@@ -799,11 +801,7 @@ void sim_color4f(float x, float y, float z, float w) {
     sim.state.current_vertex.color = HMM_Vec4(x, y, z, w);
 }
 
-void sim_draw(void) {
-    sim.state.draw_call.instances = realloc(sim.state.draw_call.instances, ++sim.state.draw_call.icount * sizeof(sim_vs_inst_t));
-    sim_vs_inst_t *inst = &sim.state.draw_call.instances[sim.state.draw_call.icount-1];
-    hmm_mat4 *m = sim_matrix_stack_head(SIM_MATRIXMODE_MODELVIEW);
-    hmm_mat4 model = m ? *m : HMM_Mat4();
+static void make_vs_inst(sim_vs_inst_t *inst, hmm_mat4 model) {
     inst->x = HMM_Vec4(model.Elements[0][0],
                        model.Elements[1][0],
                        model.Elements[2][0],
@@ -820,6 +818,13 @@ void sim_draw(void) {
                        model.Elements[1][3],
                        model.Elements[2][3],
                        model.Elements[3][3]);
+}
+
+void sim_draw(void) {
+    sim.state.draw_call.instances = realloc(sim.state.draw_call.instances, ++sim.state.draw_call.icount * sizeof(sim_vs_inst_t));
+    sim_vs_inst_t *inst = &sim.state.draw_call.instances[sim.state.draw_call.icount-1];
+    hmm_mat4 *m = sim_matrix_stack_head(SIM_MATRIXMODE_MODELVIEW);
+    make_vs_inst(inst, m ? *m : HMM_Mat4());
 }
 
 void sim_end(void) {
@@ -863,7 +868,6 @@ void sim_end(void) {
     sg_pipeline tmp = sim.state.draw_call.pip;
     memset(&sim.state.draw_call, 0, sizeof(sim_draw_call_t));
     memset(&sim.state.sampler_desc, 0, sizeof(sg_sampler_desc));
-    sim_pop_texture();
     sim.state.draw_call.pip = tmp;
 }
 
@@ -1028,102 +1032,4 @@ void sim_release_texture(int texture) {
     sg_image tmp = {.id = texture};
     if (sg_query_image_state(tmp) == SG_RESOURCESTATE_VALID)
         sg_destroy_image(tmp);
-}
-
-void sim_shape_color4ub(unsigned char r, unsigned char g, unsigned char b, unsigned char a) {
-    sim.state.shape.color = (sg_color) {
-        .r = (float)r / 255.f,
-        .g = (float)g / 255.f,
-        .b = (float)b / 255.f,
-        .a = (float)a / 255.f
-    };
-}
-
-void sim_shape_color3f(float x, float y, float z) {
-    sim.state.shape.color = (sg_color) {.r = x, .g = y, .b = z, .a = 1.f};
-}
-
-void sim_shape_color4f(float x, float y, float z, float w) {
-    sim.state.shape.color = (sg_color) {.r = x, .g = y, .b = z, .a = w};
-}
-
-void sim_shape_enable_random_colors(int enable) {
-    sim.state.shape.random_colors = enable;
-}
-
-void sim_shape_enable_merge(int enable) {
-    sim.state.shape.merge = enable;
-}
-
-#define PUSH_SHAPE(NAME)                                                                      \
-    sshape_vertex_t *vertices = malloc(size.vertices.num * sizeof(sshape_vertex_t));          \
-    uint16_t *indices = malloc(size.indices.num * sizeof(uint16_t));                          \
-    desc.color = sshape_color_4f(sim.state.shape.color.r,                                     \
-                                 sim.state.shape.color.g,                                     \
-                                 sim.state.shape.color.b,                                     \
-                                 sim.state.shape.color.a);                                    \
-    desc.merge = sim.state.shape.merge;                                                       \
-    desc.random_colors = sim.state.shape.random_colors;                                       \
-    memcpy(&desc.transform, sim_matrix_stack_head(SIM_MATRIXMODE_SHAPE), 16 * sizeof(float)); \
-    sim.state.shape.buffer = sshape_build_##NAME(&sim.state.shape.buffer, &desc);             \
-    free(vertices);                                                                           \
-    free(indices);
-
-void sim_load_plane(float width, float depth, int tiles) {
-    sshape_sizes_t size = sshape_plane_sizes(tiles);
-    sshape_plane_t desc = {
-        .width = width,
-        .depth = depth,
-        .tiles = tiles
-    };
-    PUSH_SHAPE(plane);
-}
-
-void sim_load_cube(float width, float height, float depth, int tiles) {
-    sshape_sizes_t size = sshape_box_sizes(tiles);
-    sshape_box_t desc = {
-        .width = width,
-        .height = height,
-        .depth = depth,
-        .tiles = tiles
-    };
-    PUSH_SHAPE(box);
-}
-
-void sim_load_sphere(float radius, int slices, int stacks) {
-    sshape_sizes_t size = sshape_sphere_sizes(slices, stacks);
-    sshape_sphere_t desc = {
-        .radius = radius,
-        .slices = slices,
-        .stacks = stacks
-    };
-    PUSH_SHAPE(sphere);
-}
-
-void sim_load_cylinder(float radius, float height, int slices, int stacks) {
-    sshape_sizes_t size = sshape_cylinder_sizes(slices, stacks);
-    sshape_cylinder_t desc = {
-        .radius = radius,
-        .height = height,
-        .slices = slices,
-        .stacks = stacks
-    };
-    PUSH_SHAPE(cylinder);
-}
-
-void sim_load_torus(float radius, float ring_radius, int sides, int rings) {
-    sshape_sizes_t size = sshape_torus_sizes(sides, rings);
-    sshape_torus_t desc = {
-        .radius = radius,
-        .ring_radius = ring_radius,
-        .sides = sides,
-        .rings = rings
-    };
-    PUSH_SHAPE(torus);
-}
-
-void sim_push_shape(void) {
-    // load shape vertices from buffer ...
-    sim.state.shape.random_colors = 0;
-    sim.state.shape.merge = 0;
 }

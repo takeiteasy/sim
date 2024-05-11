@@ -206,7 +206,6 @@ enum {
     SIM_MATRIXMODE_MODELVIEW  = 0,
     SIM_MATRIXMODE_PROJECTION,
     SIM_MATRIXMODE_TEXTURE,
-    SIM_MATRIXMODE_SHAPE,
     SIM_MATRIXMODE_COUNT
 };
 
@@ -232,7 +231,8 @@ enum {
 };
 
 enum {
-    SIM_BLEND_NONE = 0,
+    SIM_BLEND_DEFAULT = 0,
+    SIM_BLEND_NONE,
     SIM_BLEND_BLEND,
     SIM_BLEND_ADD,
     SIM_BLEND_MOD,
@@ -342,20 +342,6 @@ EXPORT int sim_load_texture_memory(unsigned char *data, int data_size);
 EXPORT void sim_set_texture_filter(int min, int mag);
 EXPORT void sim_set_texture_wrap(int wrap_u, int wrap_v);
 EXPORT void sim_release_texture(int texture);
-
-EXPORT void sim_shape_color4ub(unsigned char r, unsigned char g, unsigned char b, unsigned char a);
-EXPORT void sim_shape_color3f(float x, float y, float z);
-EXPORT void sim_shape_color4f(float x, float y, float z, float w);
-EXPORT void sim_shape_enable_random_colors(int enable);
-EXPORT void sim_shape_enable_merge(int enable);
-EXPORT void sim_load_plane(float width, float depth, int tiles);
-EXPORT void sim_load_cube(float width, float height, float depth, int tiles);
-EXPORT void sim_load_sphere(float radius, int slices, int stacks);
-EXPORT void sim_load_cylinder(float radius, float height, int slices, int stacks);
-EXPORT void sim_load_torus(float radius, float ring_radius, int sides, int rings);
-EXPORT void sim_push_shape(void);
-
-EXPORT
 
 #undef EXPORT
 
