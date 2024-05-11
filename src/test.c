@@ -83,10 +83,13 @@ static void loop(double t) {
     sim_pop_texture();
 }
 
-static void deinit(void) {
+static void exit(void) {
     
 }
 
 int main(int argc, const char *argv[]) {
-    return sim_run(800, 600, "sim", init, loop, deinit);
+    sim_set_init_callback(init);
+    sim_set_loop_callback(loop);
+    sim_set_exit_callback(exit);
+    return sim_run();
 }

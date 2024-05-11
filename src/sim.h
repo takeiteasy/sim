@@ -25,7 +25,6 @@
 
 #ifndef SIM_H
 #define SIM_H
-
 #if defined(__cplusplus)
 extern "C" {
 #endif
@@ -54,12 +53,6 @@ extern "C" {
 #else
 #define EXPORT
 #endif
-
-// Taken from: https://gist.github.com/61131/7a22ac46062ee292c2c8bd6d883d28de
-#define N_ARGS(...) _NARG_(__VA_ARGS__, _RSEQ())
-#define _NARG_(...) _SEQ(__VA_ARGS__)
-#define _SEQ(_1, _2, _3, _4, _5, _6, _7, _8, _9,_10,_11,_12,_13,_14,_15,_16,_17,_18,_19,_20,_21,_22,_23,_24,_25,_26,_27,_28,_29,_30,_31,_32,_33,_34,_35,_36,_37,_38,_39,_40,_41,_42,_43,_44,_45,_46,_47,_48,_49,_50,_51,_52,_53,_54,_55,_56,_57,_58,_59,_60,_61,_62,_63,_64,_65,_66,_67,_68,_69,_70,_71,_72,_73,_74,_75,_76,_77,_78,_79,_80,_81,_82,_83,_84,_85,_86,_87,_88,_89,_90,_91,_92,_93,_94,_95,_96,_97,_98,_99,_100,_101,_102,_103,_104,_105,_106,_107,_108,_109,_110,_111,_112,_113,_114,_115,_116,_117,_118,_119,_120,_121,_122,_123,_124,_125,_126,_127,N,...) N
-#define _RSEQ() 127,126,125,124,123,122,121,120,119,118,117,116,115,114,113,112,111,110,109,108,107,106,105,104,103,102,101,100,99,98,97,96,95,94,93,92,91,90,89,88,87,86,85,84,83,82,81,80,79,78,77,76,75,74,73,72,71,70,69,68,67,66,65,64,63,62,61,60,59,58,57,56,55,54,53,52,51,50,49,48,47,46,45,44,43,42,41,40,39,38,37,36,35,34,33,32,31,30,29,28,27,26,25,24,23,22,21,20,19,18,17,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0
 
 enum {
     SIM_KEY_INVALID          = 0,
@@ -261,12 +254,12 @@ enum {
     SIM_WRAP_MIRRORED_REPEAT
 };
 
-EXPORT int sim_run(int window_width,
-                   int window_height,
-                   const char *title,
-                   void(*init)(void),
-                   void(*loop)(double),
-                   void(*deinit)(void));
+EXPORT void sim_set_window_size(int width, int height);
+EXPORT void sim_set_window_title(const char *title);
+EXPORT void sim_set_init_callback(void(*callback)(void));
+EXPORT void sim_set_loop_callback(void(*callback)(double));
+EXPORT void sim_set_exit_callback(void(*callback)(void));
+EXPORT int sim_run(void);
 
 EXPORT int sim_window_width(void);
 EXPORT int sim_window_height(void);
@@ -282,17 +275,13 @@ EXPORT int sim_is_key_held(int key);
 EXPORT int sim_was_key_pressed(int key);
 EXPORT int sim_was_key_released(int key);
 EXPORT int sim_are_keys_down(int n, ...);
-#define SIM_ARE_KEYS_DOWN(...) sim_are_keys_down(N_ARGS(__VA_ARGS__), __VA_ARGS__)
 EXPORT int sim_any_keys_down(int n, ...);
-#define SIM_ANY_KEYS_DOWN(...) sim_any_keys_down(N_ARGS(__VA_ARGS__), __VA_ARGS__)
 EXPORT int sim_is_button_down(int button);
 EXPORT int sim_is_button_held(int button);
 EXPORT int sim_was_button_pressed(int button);
 EXPORT int sim_was_button_released(int button);
 EXPORT int sim_are_buttons_down(int n, ...);
-#define SIM_ARE_BUTTONS_DOWN(...) sim_are_buttons_down(N_ARGS(__VA_ARGS__), __VA_ARGS__)
 EXPORT int sim_any_buttons_down(int n, ...);
-#define SIM_ANY_BUTTONS_DOWN(...) sim_any_buttons_down(N_ARGS(__VA_ARGS__), __VA_ARGS__)
 EXPORT int sim_has_mouse_move(void);
 EXPORT int sim_cursor_x(void);
 EXPORT int sim_cursor_y(void);
@@ -342,6 +331,10 @@ EXPORT int sim_load_texture_memory(unsigned char *data, int data_size);
 EXPORT void sim_set_texture_filter(int min, int mag);
 EXPORT void sim_set_texture_wrap(int wrap_u, int wrap_v);
 EXPORT void sim_release_texture(int texture);
+
+EXPORT int sim_store_buffer(void);
+EXPORT void sim_load_buffer(int buffer);
+EXPORT void sim_release_buffer(int buffer);
 
 #undef EXPORT
 

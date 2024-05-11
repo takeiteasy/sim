@@ -167,7 +167,7 @@ typedef struct {
     int blend_mode;
     sg_image current_texture;
     sg_sampler_desc sampler_desc;
-    hmm_vec4 shape_color;
+    sg_buffer current_buffer;
 } sim_state_t;
 
 typedef struct sim_command_t {
@@ -248,8 +248,6 @@ static void init(void) {
     };
     sg_setup(&desc);
     stm_setup();
-    if (sim.init)
-        sim.init();
     
     sim.shader = sg_make_shader(sim_shader_desc(sg_query_backend()));
     sim.state.pip_desc = (sg_pipeline_desc) {
@@ -280,7 +278,6 @@ static void init(void) {
         stack->stack[0] = HMM_Mat4();
     }
     
-    sim.state.shape_color = HMM_Vec4(0.f, 0.f, 0.f, 1.f);
     sim.state.matrix_stack[SIM_MATRIXMODE_TEXTURE].stack[0] = HMM_Mat4d(1.f);
     sim.state.blend_mode = -1;
     sim_blend_mode(SIM_BLEND_DEFAULT);
@@ -288,6 +285,9 @@ static void init(void) {
     sim_depth_func(SIM_CMP_DEFAULT);
     sim.state.pip_desc.cull_mode = -1;
     sim_cull_mode(SIM_CULL_DEFAULT);
+    
+    if (sim.init)
+        sim.init();
 }
 
 static void frame(void) {
@@ -377,19 +377,37 @@ static void cleanup(void) {
     sg_shutdown();
 }
 
-int sim_run(int window_width,
-            int window_height,
-            const char *title,
-            void(*_init)(void),
-            void(*loop)(double),
-            void(*deinit)(void)) {
+void sim_set_window_size(int width, int height) {
+    if (!sim.running) {
+        if (width)
+            sim.app_desc.width = width;
+        if (height)
+            sim.app_desc.height = height;
+    }
+}
+
+void sim_set_window_title(const char *title) {
+    if (sim.running)
+        sapp_set_window_title(title);
+    else
+        sim.app_desc.window_title = title;
+}
+
+void sim_set_init_callback(void(*callback)(void)) {
+    sim.init = callback;
+}
+
+void sim_set_loop_callback(void(*callback)(double)) {
+    sim.loop = callback;
+}
+
+void sim_set_exit_callback(void(*callback)(void)) {
+    sim.deinit = callback;
+}
+
+int sim_run(void) {
     assert(!sim.running);
-    sim.init = _init;
-    sim.deinit = deinit;
-    assert((sim.loop = loop));
-    sim.app_desc.width = window_width > 0 ? window_width : DEFAULT_WINDOW_WIDTH;
-    sim.app_desc.height = window_height > 0 ? window_height : DEFAULT_WINDOW_HEIGHT;
-    sim.app_desc.window_title = title ? title : DEFAULT_WINDOW_TITLE;
+    assert(sim.loop);
     sim.app_desc.init_cb = init;
     sim.app_desc.frame_cb = frame;
     sim.app_desc.event_cb = event;
@@ -828,8 +846,14 @@ void sim_draw(void) {
 }
 
 void sim_end(void) {
-    assert(sim.state.draw_call.vertices && sim.state.draw_call.vcount);
-    assert(sim.state.draw_call.instances && sim.state.draw_call.icount);
+    if (!sim.state.draw_call.instances || !sim.state.draw_call.icount)
+        goto BAIL;
+    
+    sg_buffer vbuf;
+    if (sim.state.current_buffer.id != SG_INVALID_ID) {
+        vbuf = sim.state.current_buffer;
+        goto SKIP;
+    }
     
     sg_buffer_desc b0 = {
         .data = (sg_range) {
@@ -837,12 +861,16 @@ void sim_end(void) {
             .size = sim.state.draw_call.vcount * sizeof(sim_vertex_t)
         }
     };
+    vbuf = sg_make_buffer(&b0);
+    
     sg_buffer_desc b1 = {
         .size = sizeof(sim_vs_inst_t),
         .usage = SG_USAGE_STREAM
     };
+    
+SKIP:
     sim.state.draw_call.bind = (sg_bindings) {
-        .vertex_buffers[0] = sg_make_buffer(&b0),
+        .vertex_buffers[0] = vbuf,
         .vertex_buffers[1] = sg_make_buffer(&b1),
         .fs.images[SLOT_texture_v] = sim.state.current_texture,
         .fs.samplers = sg_make_sampler(&sim.state.sampler_desc)
@@ -861,10 +889,18 @@ void sim_end(void) {
     memcpy(draw_call, &sim.state.draw_call, sizeof(sim_draw_call_t));
     sim_push_command(SIM_CMD_DRAW_CALL, draw_call);
     
-    free(sim.state.draw_call.vertices);
+BAIL:
+    if (sim.state.draw_call.vertices) {
+        free(sim.state.draw_call.vertices);
+        sim.state.draw_call.vertices = NULL;
+    }
     sim.state.draw_call.vcount = 0;
-    free(sim.state.draw_call.instances);
+    if (sim.state.draw_call.instances) {
+        free(sim.state.draw_call.instances);
+        sim.state.draw_call.instances = NULL;
+    }
     sim.state.draw_call.icount = 0;
+    
     sg_pipeline tmp = sim.state.draw_call.pip;
     memset(&sim.state.draw_call, 0, sizeof(sim_draw_call_t));
     memset(&sim.state.sampler_desc, 0, sizeof(sg_sampler_desc));
@@ -993,43 +1029,72 @@ int sim_load_texture_memory(unsigned char *data, int data_size) {
     return texture.id;
 }
 
+static void set_filter(sg_filter *dst, int val) {
+    switch (val) {
+        default:
+        case SIM_FILTER_DEFAULT:
+            val = SIM_FILTER_NONE;
+        case SIM_FILTER_NONE:
+        case SIM_FILTER_NEAREST:
+        case SIM_FILTER_LINEAR:
+            if (dst)
+                *dst = val;
+            break;
+    }
+}
+
 void sim_set_texture_filter(int min, int mag) {
     assert(sg_query_image_state(sim.state.current_texture) == SG_RESOURCESTATE_VALID);
-#define SET_FILTER(NAME)                                 \
-    switch ((NAME)) {                                    \
-        case SIM_FILTER_DEFAULT:                         \
-            NAME = SIM_FILTER_NONE;                      \
-        case SIM_FILTER_NONE:                            \
-        case SIM_FILTER_NEAREST:                         \
-        case SIM_FILTER_LINEAR:                          \
-            sim.state.sampler_desc.NAME##_filter = NAME; \
-            break;                                       \
-        default:                                         \
-            abort();                                     \
+    set_filter(&sim.state.sampler_desc.min_filter, min);
+    set_filter(&sim.state.sampler_desc.mag_filter, mag);
+}
+
+static void set_wrap(sg_wrap *dst, int val) {
+    switch (val) {
+        default:
+        case SIM_WRAP_DEFAULT:
+            val = SIM_WRAP_REPEAT;
+        case SIM_WRAP_REPEAT:
+        case SIM_WRAP_CLAMP_TO_EDGE:
+        case SIM_WRAP_CLAMP_TO_BORDER:
+        case SIM_WRAP_MIRRORED_REPEAT:
+            if (dst)
+                *dst = val;
+            break;
     }
-    SET_FILTER(min);
-    SET_FILTER(mag);
 }
 
 void sim_set_texture_wrap(int wrap_u, int wrap_v) {
     assert(sg_query_image_state(sim.state.current_texture) == SG_RESOURCESTATE_VALID);
-#define SET_WRAP(NAME)                          \
-    switch (NAME) {                             \
-        case SIM_WRAP_DEFAULT:                  \
-    NAME = SIM_WRAP_REPEAT;                     \
-        case SIM_WRAP_REPEAT:                   \
-        case SIM_WRAP_CLAMP_TO_EDGE:            \
-        case SIM_WRAP_CLAMP_TO_BORDER:          \
-        case SIM_WRAP_MIRRORED_REPEAT:          \
-            sim.state.sampler_desc.NAME = NAME; \
-            break;                              \
-    }
-    SET_WRAP(wrap_u);
-    SET_WRAP(wrap_v);
+    set_wrap(&sim.state.sampler_desc.wrap_u, wrap_u);
+    set_wrap(&sim.state.sampler_desc.wrap_v, wrap_v);
 }
 
 void sim_release_texture(int texture) {
     sg_image tmp = {.id = texture};
     if (sg_query_image_state(tmp) == SG_RESOURCESTATE_VALID)
         sg_destroy_image(tmp);
+}
+
+int sim_store_buffer(void) {
+    sg_buffer_desc desc = {
+        .data = (sg_range) {
+            .ptr = sim.state.draw_call.vertices,
+            .size = sim.state.draw_call.vcount * sizeof(sim_vertex_t)
+        }
+    };
+    sg_buffer result = sg_make_buffer(&desc);
+    assert(sg_query_buffer_state(result) == SG_RESOURCESTATE_VALID);
+    return result.id;
+}
+
+void sim_load_buffer(int buffer) {
+    sg_buffer buf = {.id = buffer};
+    assert(sg_query_buffer_state((sim.state.current_buffer = buf)) == SG_RESOURCESTATE_VALID);
+}
+
+void sim_release_buffer(int buffer) {
+    sg_buffer buf = {.id = buffer};
+    if (sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID)
+        sg_destroy_buffer(buf);
 }
